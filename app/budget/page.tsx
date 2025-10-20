@@ -1,8 +1,6 @@
-import { redirect } from 'next/navigation'
-import { getServerSession } from '../../lib/authServer'
 import ProtectedClient from '../../components/ProtectedClient'
 
-export default async function BudgetPage() {
+export default function BudgetPage() {
 
     return (
         <ProtectedClient>
