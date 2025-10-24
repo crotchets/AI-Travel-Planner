@@ -5,7 +5,7 @@ import { useAuth } from './AuthProvider'
 
 export default function SignOutButton() {
     const router = useRouter()
-    const { setUser } = useAuth()
+    const { setUserState } = useAuth()
 
     async function signOut() {
         try {
@@ -16,7 +16,7 @@ export default function SignOutButton() {
 
         // Ensure client state is cleared immediately
         try {
-            setUser(null)
+            setUserState(null)
         } catch (e) {
             // ignore
         }

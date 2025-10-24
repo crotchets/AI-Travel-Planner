@@ -14,8 +14,12 @@ npm run dev
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-IFLYTEK_APP_ID=your_iflytek_app_id
-IFLYTEK_API_SECRET=your_iflytek_api_secret
+IFLYTEK_IAT_APP_ID=your_iflytek_iat_app_id
+IFLYTEK_IAT_API_KEY=your_iflytek_iat_api_key
+IFLYTEK_IAT_API_SECRET=your_iflytek_iat_api_secret
+# （可选）兼容旧 REST 调用的变量
+IFLYTEK_APP_ID=your_legacy_iflytek_app_id
+IFLYTEK_API_SECRET=your_legacy_iflytek_api_secret
 ```
 
 主要目录：
@@ -26,5 +30,5 @@ IFLYTEK_API_SECRET=your_iflytek_api_secret
 
 亮点能力：
 
-- `components/ItineraryInputForm.tsx` 支持浏览器原生语音识别与科大讯飞语音转写双模式切换，后者需在 `.env.local` 中配置讯飞 API 凭证。
-- `app/api/transcribe/iflytek/route.ts` 封装讯飞语音转写调用流程（prepare → upload → merge → progress → result），并返回整理后的文本结果。
+- `components/ItineraryInputForm.tsx` 支持浏览器原生语音识别与科大讯飞语音转写双模式切换，并在本地将录音流转码为 16k PCM 后再上传。
+- `app/api/transcribe/iflytek/route.ts` 基于 websocket 调用讯飞实时听写（IAT）服务，按帧推送音频并聚合返回的实时转写结果。

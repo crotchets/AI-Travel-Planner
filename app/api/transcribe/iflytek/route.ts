@@ -1,276 +1,300 @@
 import crypto from 'crypto'
+import WebSocket from 'ws'
 import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-interface IflytekResponse<T = unknown> {
-    ok: number
-    err_no: number
-    failed: string | null
-    data: T
+const DEFAULT_WS_URL = process.env.IFLYTEK_IAT_URL ?? 'wss://iat-api.xfyun.cn/v2/iat'
+const parsedWsUrl = new URL(DEFAULT_WS_URL)
+const WS_HOST = parsedWsUrl.host
+const WS_PATH = parsedWsUrl.pathname || '/v2/iat'
+
+const APP_ID = (process.env.IFLYTEK_IAT_APP_ID ?? process.env.IFLYTEK_APP_ID)?.trim()
+const API_KEY = (process.env.IFLYTEK_IAT_API_KEY ?? process.env.IFLYTEK_API_KEY)?.trim()
+const API_SECRET = (process.env.IFLYTEK_IAT_API_SECRET ?? process.env.IFLYTEK_API_SECRET ?? process.env.IFLYTEK_SECRET_KEY)?.trim()
+
+const DEFAULT_SAMPLE_RATE = Number(process.env.IFLYTEK_IAT_SAMPLE_RATE ?? 16000)
+const FRAME_CHUNK_BYTES = Number(process.env.IFLYTEK_IAT_CHUNK_BYTES ?? 1280)
+const MAX_AUDIO_BYTES = Number(process.env.IFLYTEK_IAT_MAX_BYTES ?? 10 * 1024 * 1024)
+
+const DEFAULT_BUSINESS: Record<string, string> = {
+    language: process.env.IFLYTEK_IAT_LANGUAGE ?? 'zh_cn',
+    domain: process.env.IFLYTEK_IAT_DOMAIN ?? 'iat',
+    accent: process.env.IFLYTEK_IAT_ACCENT ?? 'mandarin',
+    dwa: process.env.IFLYTEK_IAT_DWA ?? 'wpgs'
 }
 
-interface ProgressPayload {
-    desc: string
-    status: number
+const FRAME_STATUS = {
+    FIRST: 0,
+    CONTINUE: 1,
+    LAST: 2
+} as const
+
+type FrameStatus = (typeof FRAME_STATUS)[keyof typeof FRAME_STATUS]
+
+interface IatWord {
+    w: string
 }
 
-interface ResultSegment {
-    onebest?: string
-    speaker?: string
-    bg?: string
-    ed?: string
-    wordsResultList?: Array<{
-        wordsName: string
-        wordBg: string
-        wordEd: string
-        wc: string
-    }>
+interface IatSentence {
+    cw: IatWord[]
 }
 
-const HOST = process.env.IFLYTEK_API_HOST?.replace(/\/$/, '') ?? 'https://raasr.xfyun.cn'
-const APP_ID = process.env.IFLYTEK_APP_ID
-const SECRET_KEY = process.env.IFLYTEK_API_SECRET ?? process.env.IFLYTEK_SECRET_KEY
-
-const MAX_FILE_BYTES = Number(process.env.IFLYTEK_MAX_FILE_BYTES ?? 15 * 1024 * 1024)
-const FILE_PIECE_SIZE = Number(process.env.IFLYTEK_FILE_PIECE_SIZE ?? 10 * 1024 * 1024)
-const POLL_INTERVAL_MS = Number(process.env.IFLYTEK_POLL_INTERVAL_MS ?? 5_000)
-const POLL_TIMEOUT_MS = Number(process.env.IFLYTEK_POLL_TIMEOUT_MS ?? 2 * 60_000)
-
-const DEFAULT_PREPARE_OPTIONS: Record<string, string | undefined> = {
-    lfasr_type: process.env.IFLYTEK_LFASR_TYPE ?? '0',
-    has_participle: process.env.IFLYTEK_HAS_PARTICIPLE,
-    has_seperate: process.env.IFLYTEK_HAS_SEPERATE,
-    max_alternatives: process.env.IFLYTEK_MAX_ALTERNATIVES,
-    has_smooth: process.env.IFLYTEK_HAS_SMOOTH,
-    eng_vad_margin: process.env.IFLYTEK_ENG_VAD_MARGIN,
-    track_mode: process.env.IFLYTEK_TRACK_MODE,
-    speaker_number: process.env.IFLYTEK_SPEAKER_NUMBER,
-    role_type: process.env.IFLYTEK_ROLE_TYPE,
-    language: process.env.IFLYTEK_LANGUAGE,
-    pd: process.env.IFLYTEK_PD,
-    hotWord: process.env.IFLYTEK_HOT_WORD
+interface IatResult {
+    sn: number
+    ws: IatSentence[]
+    pgs?: 'rpl'
+    rg?: [number, number]
 }
 
-const PREPARE_OPTION_KEYS = new Set(Object.keys(DEFAULT_PREPARE_OPTIONS))
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
-class SliceIdGenerator {
-    #current: string
-
-    constructor() {
-        this.#current = 'aaaaaaaaa`'
-    }
-
-    next() {
-        let ch = this.#current
-        let i = ch.length - 1
-
-        while (i >= 0) {
-            const code = ch.charCodeAt(i)
-            if (code !== 122) {
-                ch = ch.slice(0, i) + String.fromCharCode(code + 1) + ch.slice(i + 1)
-                break
-            }
-
-            ch = ch.slice(0, i) + 'a' + ch.slice(i + 1)
-            i -= 1
-        }
-
-        this.#current = ch
-        return ch
+interface IatResponsePayload {
+    code: number
+    message: string
+    sid?: string
+    data?: {
+        status: number
+        result?: IatResult
     }
 }
 
 function ensureCredentials() {
-    if (!APP_ID || !SECRET_KEY) {
-        throw new Error('未配置讯飞语音转写凭证，请在环境变量中设置 IFLYTEK_APP_ID 和 IFLYTEK_API_SECRET。')
+    if (!APP_ID || !API_KEY || !API_SECRET) {
+        throw new Error('未配置讯飞语音听写凭证，请在环境变量中设置 IFLYTEK_IAT_APP_ID、IFLYTEK_IAT_API_KEY、IFLYTEK_IAT_API_SECRET。')
     }
 }
 
-function createAuth() {
-    ensureCredentials()
-    const ts = Math.floor(Date.now() / 1000).toString()
-    const md5 = crypto.createHash('md5').update(`${APP_ID}${ts}`).digest('hex')
-    const signa = crypto.createHmac('sha1', SECRET_KEY as string).update(md5).digest('base64')
-    return { ts, signa }
-}
+function buildWsUrl(date: string) {
+    const signatureOrigin = `host: ${WS_HOST}\ndate: ${date}\nGET ${WS_PATH} HTTP/1.1`
+    const signature = crypto.createHmac('sha256', API_SECRET as string).update(signatureOrigin).digest('base64')
+    const authorizationOrigin = `api_key="${API_KEY}", algorithm="hmac-sha256", headers="host date request-line", signature="${signature}"`
+    const authorization = Buffer.from(authorizationOrigin).toString('base64')
 
-async function postUrlEncoded(path: string, params: Record<string, string>) {
-    const { ts, signa } = createAuth()
-    const body = new URLSearchParams({ app_id: APP_ID as string, ts, signa, ...params })
-
-    const response = await fetch(`${HOST}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-        body,
-        cache: 'no-store'
+    const params = new URLSearchParams({
+        authorization,
+        date,
+        host: WS_HOST
     })
 
-    if (!response.ok) {
-        const text = await response.text()
-        throw new Error(`调用讯飞接口失败（${path}）: ${text || response.status}`)
-    }
-
-    const data = (await response.json()) as IflytekResponse
-    return data
+    return `${DEFAULT_WS_URL}?${params.toString()}`
 }
 
-async function postMultipart(path: string, formData: FormData) {
-    const response = await fetch(`${HOST}${path}`, {
-        method: 'POST',
-        body: formData,
-        cache: 'no-store'
-    })
-
-    if (!response.ok) {
-        const text = await response.text()
-        throw new Error(`调用讯飞接口失败（${path}）: ${text || response.status}`)
-    }
-
-    const data = (await response.json()) as IflytekResponse
-    return data
+function buildTranscript(results: Array<IatResult | null>) {
+    return results
+        .filter((segment): segment is IatResult => Boolean(segment))
+        .map(segment =>
+            segment.ws
+                .map(part => part.cw.map(word => word.w).join(''))
+                .join('')
+        )
+        .join('')
 }
 
-function assertOk<T>(payload: IflytekResponse<T>, step: string) {
-    if (payload.ok !== 0) {
-        throw new Error(`讯飞接口调用失败（${step}）：${payload.failed ?? '未知错误'}，错误码：${payload.err_no}`)
+function normaliseBusiness(overrides?: unknown) {
+    if (!overrides || typeof overrides !== 'object') {
+        return { ...DEFAULT_BUSINESS }
     }
-}
 
-function parseJsonPayload<T>(value: unknown, step: string): T {
-    if (typeof value === 'string') {
-        try {
-            return JSON.parse(value) as T
-        } catch (error) {
-            const message = error instanceof Error ? error.message : '未知错误'
-            throw new Error(`解析讯飞返回数据失败（${step}）：${message}`)
+    const sanitised: Record<string, string> = {}
+    for (const [key, value] of Object.entries(overrides)) {
+        if (typeof value === 'string' && value.trim().length > 0) {
+            sanitised[key] = value.trim()
         }
     }
 
-    return value as T
+    return { ...DEFAULT_BUSINESS, ...sanitised }
+}
+
+function createFramePayload(params: {
+    status: number
+    chunk: Buffer | null
+    sampleRate: number
+    business: Record<string, string>
+}) {
+    const audioBase64 = params.chunk ? params.chunk.toString('base64') : ''
+    const data = {
+        status: params.status,
+        format: `audio/L16;rate=${params.sampleRate}`,
+        audio: audioBase64,
+        encoding: 'raw'
+    }
+
+    if (params.status === FRAME_STATUS.FIRST) {
+        return {
+            common: {
+                app_id: APP_ID
+            },
+            business: params.business,
+            data
+        }
+    }
+
+    return { data }
+}
+
+async function streamByWebsocket(audio: Buffer, sampleRate: number, businessOverrides?: unknown) {
+    ensureCredentials()
+
+    if (!audio.length) {
+        throw new Error('音频内容为空，无法进行语音听写。')
+    }
+
+    if (audio.length > MAX_AUDIO_BYTES) {
+        throw new Error(`音频内容过大（>${Math.round(MAX_AUDIO_BYTES / (1024 * 1024))}MB），请缩短录音时长后再试。`)
+    }
+
+    const business = normaliseBusiness(businessOverrides)
+    const chunkSize = Number.isFinite(FRAME_CHUNK_BYTES) && FRAME_CHUNK_BYTES > 0 ? FRAME_CHUNK_BYTES : 1280
+
+    return new Promise<{
+        transcript: string
+        segments: IatResult[]
+        sid?: string
+        message?: string
+    }>((resolve, reject) => {
+        const date = new Date().toUTCString()
+        const wsUrl = buildWsUrl(date)
+        const ws = new WebSocket(wsUrl)
+
+        let hasFinished = false
+        const results: Array<IatResult | null> = []
+        let sid: string | undefined
+
+        ws.on('open', () => {
+            let status: FrameStatus = FRAME_STATUS.FIRST
+            let offset = 0
+
+            const sendNextFrame = () => {
+                if (hasFinished || ws.readyState !== WebSocket.OPEN) {
+                    return
+                }
+
+                if (offset >= audio.length) {
+                    const lastFrame = createFramePayload({ status: FRAME_STATUS.LAST, chunk: null, sampleRate, business })
+                    ws.send(JSON.stringify(lastFrame))
+                    status = FRAME_STATUS.LAST
+                    return
+                }
+
+                const end = Math.min(offset + chunkSize, audio.length)
+                const chunk = audio.subarray(offset, end)
+                const frame = createFramePayload({ status, chunk, sampleRate, business })
+                ws.send(JSON.stringify(frame))
+                status = FRAME_STATUS.CONTINUE
+                offset = end
+
+                setTimeout(sendNextFrame, 40)
+            }
+
+            sendNextFrame()
+        })
+
+        ws.on('message', raw => {
+            try {
+                const payload = JSON.parse(raw.toString()) as IatResponsePayload
+                sid = payload.sid ?? sid
+
+                if (payload.code !== 0) {
+                    if (!hasFinished) {
+                        hasFinished = true
+                        ws.close()
+                        reject(new Error(`讯飞语音听写失败（${payload.code}）：${payload.message}`))
+                    }
+                    return
+                }
+
+                const data = payload.data
+                if (data?.result) {
+                    const result = data.result
+                    if (result.pgs === 'rpl' && Array.isArray(result.rg)) {
+                        const [start, end] = result.rg
+                        for (let i = start; i <= end; i += 1) {
+                            results[i] = null
+                        }
+                    }
+                    results[result.sn] = result
+                }
+
+                if (data?.status === FRAME_STATUS.LAST) {
+                    const transcript = buildTranscript(results)
+                    const segments = results.filter((segment): segment is IatResult => Boolean(segment))
+                    hasFinished = true
+                    ws.close()
+                    resolve({ transcript, segments, sid, message: payload.message })
+                }
+            } catch (error) {
+                if (!hasFinished) {
+                    hasFinished = true
+                    ws.close()
+                    reject(error instanceof Error ? error : new Error('解析讯飞返回数据失败'))
+                }
+            }
+        })
+
+        ws.on('error', err => {
+            if (!hasFinished) {
+                hasFinished = true
+                ws.close()
+                reject(err instanceof Error ? err : new Error('讯飞语音听写连接出现错误'))
+            }
+        })
+
+        ws.on('close', () => {
+            if (!hasFinished) {
+                hasFinished = true
+                reject(new Error('讯飞语音听写连接已关闭但未返回最终结果。'))
+            }
+        })
+    })
+}
+
+interface RequestBody {
+    audio?: string
+    pcm?: string
+    sampleRate?: number | string
+    business?: unknown
 }
 
 export async function POST(request: Request) {
     try {
-        ensureCredentials()
+        const parsedBody = (await request.json().catch(() => null)) as RequestBody | null
 
-        const formData = await request.formData()
-        const file = formData.get('file')
-        const fileName = (formData.get('fileName') as string) || 'browser-recording.opus'
-
-        if (!(file instanceof Blob)) {
-            return NextResponse.json({ error: '缺少音频文件内容' }, { status: 400 })
+        if (!parsedBody || typeof parsedBody !== 'object') {
+            return NextResponse.json({ error: '请求体格式错误，请使用 JSON。' }, { status: 400 })
         }
 
-        const arrayBuffer = await file.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
+        const audioBase64 = typeof parsedBody.audio === 'string'
+            ? parsedBody.audio
+            : typeof parsedBody.pcm === 'string'
+                ? parsedBody.pcm
+                : ''
 
-        if (!buffer.length) {
-            return NextResponse.json({ error: '空音频文件，请重新录制后再试。' }, { status: 400 })
+        if (!audioBase64) {
+            return NextResponse.json({ error: '缺少音频内容，请提供 base64 编码的 PCM 数据。' }, { status: 400 })
         }
 
-        if (buffer.length > MAX_FILE_BYTES) {
-            return NextResponse.json(
-                { error: `音频文件过大（>${Math.round(MAX_FILE_BYTES / (1024 * 1024))}MB），请缩短录音时长。` },
-                { status: 400 }
-            )
+        let audioBuffer: Buffer
+        try {
+            audioBuffer = Buffer.from(audioBase64, 'base64')
+        } catch {
+            return NextResponse.json({ error: '音频内容解析失败，请确保是有效的 base64 字符串。' }, { status: 400 })
         }
 
-        const pieceSize = Number.isFinite(FILE_PIECE_SIZE) && FILE_PIECE_SIZE > 0 ? FILE_PIECE_SIZE : 10 * 1024 * 1024
-        const sliceNum = Math.max(1, Math.ceil(buffer.length / pieceSize))
-
-        const prepareParams: Record<string, string> = {
-            file_len: buffer.length.toString(),
-            file_name: fileName,
-            slice_num: sliceNum.toString()
+        if (!audioBuffer.length) {
+            return NextResponse.json({ error: '音频内容为空，请检查录音流程。' }, { status: 400 })
         }
 
-        for (const key of PREPARE_OPTION_KEYS) {
-            const formValue = formData.get(key)
-            if (typeof formValue === 'string' && formValue.trim().length > 0) {
-                prepareParams[key] = formValue.trim()
-            } else {
-                const defaultValue = DEFAULT_PREPARE_OPTIONS[key]
-                if (typeof defaultValue === 'string' && defaultValue.length > 0) {
-                    prepareParams[key] = defaultValue
-                }
-            }
-        }
+        const requestedSampleRate = Number(parsedBody.sampleRate)
+        const sampleRate = Number.isFinite(requestedSampleRate) && requestedSampleRate > 0
+            ? requestedSampleRate
+            : DEFAULT_SAMPLE_RATE
 
-        const prepareResponse = await postUrlEncoded('/api/prepare', prepareParams)
-        assertOk(prepareResponse, 'prepare')
-        const taskId = prepareResponse.data as string
+        const { transcript, segments, sid, message } = await streamByWebsocket(audioBuffer, sampleRate, parsedBody.business)
 
-        const sliceIdGenerator = new SliceIdGenerator()
-        let offset = 0
-        let partIndex = 0
-
-        while (offset < buffer.length) {
-            const end = Math.min(offset + pieceSize, buffer.length)
-            const chunk = buffer.subarray(offset, end)
-            const { ts, signa } = createAuth()
-            const uploadForm = new FormData()
-            uploadForm.append('app_id', APP_ID as string)
-            uploadForm.append('ts', ts)
-            uploadForm.append('signa', signa)
-            uploadForm.append('task_id', taskId)
-            uploadForm.append('slice_id', sliceIdGenerator.next())
-            uploadForm.append('content', new Blob([chunk]), `${fileName}.part${String(partIndex).padStart(4, '0')}`)
-
-            const uploadResponse = await postMultipart('/api/upload', uploadForm)
-            assertOk(uploadResponse, `upload-${partIndex + 1}`)
-
-            offset = end
-            partIndex += 1
-        }
-
-        const mergeParams: Record<string, string> = { task_id: taskId, file_name: fileName }
-        const mergeResponse = await postUrlEncoded('/api/merge', mergeParams)
-        assertOk(mergeResponse, 'merge')
-
-        const startedAt = Date.now()
-        let status = 0
-        let progressDesc: string | undefined
-
-        while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
-            const progressResponse = await postUrlEncoded('/api/getProgress', { task_id: taskId })
-            assertOk(progressResponse, 'getProgress')
-
-            const payload = parseJsonPayload<ProgressPayload>(progressResponse.data, 'getProgress')
-            status = Number(payload.status)
-            progressDesc = payload.desc
-
-            if (status === 9) {
-                break
-            }
-
-            await sleep(POLL_INTERVAL_MS)
-        }
-
-        if (status !== 9) {
-            throw new Error(progressDesc ? `讯飞转写超时（${progressDesc}），请稍后重试。` : '讯飞转写超时未完成，请稍后重试。')
-        }
-
-        const resultResponse = await postUrlEncoded('/api/getResult', { task_id: taskId })
-        assertOk(resultResponse, 'getResult')
-
-        const segments = parseJsonPayload<ResultSegment[]>(resultResponse.data, 'getResult')
-        const transcriptParts = segments
-            .map(segment => segment.onebest?.trim())
-            .filter((text): text is string => Boolean(text && text.length > 0))
-        const transcript = transcriptParts.join('\n')
-
-        if (!transcript) {
-            throw new Error('讯飞转写完成但返回结果为空，请检查音频内容。')
-        }
-
-        return NextResponse.json({ transcript, segments, taskId, progress: { desc: progressDesc, status } })
+        return NextResponse.json({ transcript, segments, sid, message })
     } catch (error) {
-        console.error('[iflytek-transcribe]', error)
-        const message = error instanceof Error ? error.message : '讯飞转写出现未知错误'
+        console.error('[iflytek-transcribe-websocket]', error)
+        const message = error instanceof Error ? error.message : '讯飞语音听写出现未知错误'
         return NextResponse.json({ error: message }, { status: 500 })
     }
 }

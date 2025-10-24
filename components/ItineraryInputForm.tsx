@@ -5,6 +5,119 @@ type PlanningMode = 'idle' | 'thinking'
 
 const MAX_CHARS = 800
 
+const TARGET_SAMPLE_RATE = 16000
+
+function getAudioContextConstructor(): typeof AudioContext {
+    if (typeof window === 'undefined') {
+        throw new Error('当前环境不支持音频处理。')
+    }
+
+    const ctor = window.AudioContext ?? (window as any).webkitAudioContext
+    if (!ctor) {
+        throw new Error('当前浏览器不支持音频处理。')
+    }
+
+    return ctor as typeof AudioContext
+}
+
+function mixDownToMono(buffer: AudioBuffer) {
+    if (buffer.numberOfChannels === 1) {
+        return buffer.getChannelData(0)
+    }
+
+    const length = buffer.length
+    const result = new Float32Array(length)
+
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+        const channelData = buffer.getChannelData(channel)
+        for (let i = 0; i < length; i += 1) {
+            result[i] += channelData[i]
+        }
+    }
+
+    for (let i = 0; i < length; i += 1) {
+        result[i] /= buffer.numberOfChannels
+    }
+
+    return result
+}
+
+function downsampleToRate(data: Float32Array, originalSampleRate: number, targetSampleRate: number) {
+    if (!Number.isFinite(originalSampleRate) || originalSampleRate <= 0) {
+        throw new Error('无法解析录音采样率。')
+    }
+
+    if (!Number.isFinite(targetSampleRate) || targetSampleRate <= 0 || targetSampleRate >= originalSampleRate) {
+        return { data, sampleRate: originalSampleRate }
+    }
+
+    const ratio = originalSampleRate / targetSampleRate
+    const newLength = Math.max(1, Math.floor(data.length / ratio))
+    const result = new Float32Array(newLength)
+
+    let offsetResult = 0
+    let offsetBuffer = 0
+
+    while (offsetResult < newLength) {
+        const nextOffsetBuffer = Math.floor((offsetResult + 1) * ratio)
+        let accum = 0
+        let count = 0
+        for (let i = offsetBuffer; i < nextOffsetBuffer && i < data.length; i += 1) {
+            accum += data[i]
+            count += 1
+        }
+        result[offsetResult] = count > 0 ? accum / count : 0
+        offsetResult += 1
+        offsetBuffer = nextOffsetBuffer
+    }
+
+    return { data: result, sampleRate: targetSampleRate }
+}
+
+function floatTo16BitPCM(float32Array: Float32Array) {
+    const buffer = new ArrayBuffer(float32Array.length * 2)
+    const view = new DataView(buffer)
+
+    for (let i = 0; i < float32Array.length; i += 1) {
+        let sample = Math.max(-1, Math.min(1, float32Array[i]))
+        sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff
+        view.setInt16(i * 2, sample, true)
+    }
+
+    return buffer
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+    let binary = ''
+    const bytes = new Uint8Array(buffer)
+    const chunkSize = 0x8000
+
+    for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize)
+        binary += String.fromCharCode(...chunk)
+    }
+
+    return btoa(binary)
+}
+
+async function convertBlobToPcmBase64(blob: Blob, targetSampleRate: number) {
+    const AudioContextCtor = getAudioContextConstructor()
+    const audioContext = new AudioContextCtor()
+
+    try {
+        const arrayBuffer = await blob.arrayBuffer()
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0))
+        const monoData = mixDownToMono(audioBuffer)
+        const { data, sampleRate } = downsampleToRate(monoData, audioBuffer.sampleRate, targetSampleRate)
+        const pcmBuffer = floatTo16BitPCM(data)
+        const base64 = arrayBufferToBase64(pcmBuffer)
+
+        return { base64, sampleRate }
+    } finally {
+        await audioContext.close()
+    }
+}
+
 type SpeechRecognitionType = any
 type SpeechProvider = 'browser' | 'iflytek'
 
@@ -151,24 +264,36 @@ export default function ItineraryInputForm({
                     mediaStreamRef.current = null
                 }
 
-                const blob = new Blob(chunks, { type: 'audio/webm;codecs=opus' })
-                if (!blob.size) {
-                    setIsRecording(false)
+                setIsRecording(false)
+
+                if (!chunks.length) {
+                    setStatusMessage(null)
                     return
                 }
 
-                setStatusMessage('讯飞转写中，请稍候…')
+                const blob = new Blob(chunks, { type: 'audio/webm;codecs=opus' })
+                if (!blob.size) {
+                    setStatusMessage(null)
+                    return
+                }
+
                 setIsUploadingAudio(true)
                 setError(null)
 
                 try {
-                    const formData = new FormData()
-                    formData.append('file', blob, 'browser-recording.opus')
-                    formData.append('fileName', 'browser-recording.opus')
+                    setStatusMessage('音频处理中…')
+                    const { base64, sampleRate } = await convertBlobToPcmBase64(blob, TARGET_SAMPLE_RATE)
+                    setStatusMessage('讯飞转写中，请稍候…')
 
                     const response = await fetch('/api/transcribe/iflytek', {
                         method: 'POST',
-                        body: formData
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            audio: base64,
+                            sampleRate
+                        })
                     })
 
                     if (!response.ok) {
@@ -177,7 +302,7 @@ export default function ItineraryInputForm({
                     }
 
                     const data = await response.json()
-                    const transcript = data?.transcript as string | undefined
+                    const transcript = typeof data?.transcript === 'string' ? data.transcript : ''
 
                     if (!transcript) {
                         throw new Error('讯飞转写未返回文本结果')
@@ -189,11 +314,11 @@ export default function ItineraryInputForm({
                     })
                 } catch (err) {
                     console.error(err)
-                    setError('调用讯飞转写失败，请稍后再试或改用文字输入。')
+                    const message = err instanceof Error ? err.message : '调用讯飞转写失败，请稍后再试或改用文字输入。'
+                    setError(message)
                 } finally {
                     setIsUploadingAudio(false)
                     setStatusMessage(null)
-                    setIsRecording(false)
                 }
             }
 
