@@ -6,14 +6,14 @@ import Nav from './Nav'
 export default function RootClient({ children }: { children: React.ReactNode }) {
     return (
         <AuthProvider>
-            <div className="min-h-screen flex flex-col">
-                <header className="bg-white shadow-sm">
-                    <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-                        <h1 className="text-lg font-semibold">AI Travel Planner</h1>
+            <div className="flex min-h-screen flex-col">
+                <header className="bg-white/90 backdrop-blur border-b border-slate-200">
+                    <div className="container mx-auto flex items-center justify-between px-5 py-5 lg:px-8">
+                        <h1 className="text-xl font-bold tracking-tight text-slate-900 lg:text-2xl">AI Travel Planner</h1>
                         <Nav />
                     </div>
                 </header>
-                <main className="container mx-auto px-4 py-6 flex-1">{children}</main>
+                <main className="flex-1 w-full">{children}</main>
             </div>
         </AuthProvider>
     )
