@@ -9,6 +9,7 @@ export default function AuthForm() {
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [message, setMessage] = useState<string | null>(null)
+    const [emailError, setEmailError] = useState<string | null>(null)
 
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -16,8 +17,16 @@ export default function AuthForm() {
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
-        setLoading(true)
         setMessage(null)
+        setEmailError(null)
+
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailPattern.test(email)) {
+            setEmailError('请输入有效的邮箱地址')
+            return
+        }
+
+        setLoading(true)
 
         if (isSignUp) {
             const { data, error } = await supabase.auth.signUp({ email, password })
@@ -46,7 +55,15 @@ export default function AuthForm() {
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <label className="block text-sm font-medium">邮箱</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} required className="mt-1 block w-full border rounded px-3 py-2" />
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        required
+                        aria-invalid={emailError ? 'true' : 'false'}
+                        className={`mt-1 block w-full rounded border px-3 py-2 ${emailError ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
+                    />
+                    {emailError && <p className="mt-1 text-xs text-red-500">{emailError}</p>}
                 </div>
                 <div>
                     <label className="block text-sm font-medium">密码</label>
