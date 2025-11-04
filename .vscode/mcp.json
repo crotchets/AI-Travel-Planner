@@ -1,0 +1,22 @@
+{
+	"servers": {
+		"amap-maps": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"@amap/amap-maps-mcp-server@0.0.8"
+			],
+			"env": {
+				"AMAP_MAPS_API_KEY": "${input:amap_api_key}"
+			},
+			"type": "stdio"
+		}
+	},
+	"inputs": [
+		{
+			"id": "amap_api_key",
+			"type": "promptString",
+			"description": "Enter your AMap Maps API Key"
+		}
+	]
+}

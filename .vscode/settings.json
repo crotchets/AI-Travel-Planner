@@ -1,0 +1,10 @@
+{
+    "chat.mcp.serverSampling": {
+        "ai-travel-planner/.vscode/mcp.json: amap-maps": {
+            "allowedModels": [
+                "copilot/gpt-5-mini",
+                "copilot/gpt-5-codex"
+            ]
+        }
+    }
+}

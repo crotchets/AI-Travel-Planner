@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { useAuth } from './AuthProvider'
 import ItineraryInputForm from './ItineraryInputForm'
+import MapPreview from './MapPreview'
 
 const MIN_RATIO = 0.35
 const MAX_RATIO = 0.75
@@ -20,6 +21,7 @@ export default function DashboardClient() {
     const containerRef = useRef<HTMLDivElement>(null)
     const isDraggingRef = useRef(false)
     const [panelRatio, setPanelRatio] = useState(0.6)
+    const amapApiKey = process.env.NEXT_PUBLIC_AMAP_API_KEY
 
     const clampRatio = useCallback((value: number) => {
         return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value))
@@ -158,26 +160,19 @@ export default function DashboardClient() {
                         aria-hidden="true"
                         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.35),rgba(15,23,42,0.95))]"
                     />
-                    <div className="relative flex h-[340px] flex-col justify-between sm:h-[380px] lg:h-[480px]">
-                        <div className="p-6">
+                    <div className="relative flex h-[340px] flex-col sm:h-[380px] lg:h-[480px]">
+                        <div className="p-6 pb-0">
                             <p className="text-xs uppercase tracking-[0.3em] text-blue-200/80">地图概览</p>
                             <h3 className="mt-4 text-xl font-semibold">旅程目的地</h3>
                             <p className="mt-2 text-sm text-slate-200/90">
-                                在这里展示行程目的地、酒店与景点标记。当前为占位示意图，可后续接入 Mapbox / 高德 / 谷歌地图等服务。
+                                基于高德地图 Web JS API 展示行程目的地、酒店与景点标记。当前默认使用占位 Key，请在环境变量中设置
+                                <code className="mx-1 rounded bg-white/10 px-1 text-[11px] tracking-wide">NEXT_PUBLIC_AMAP_API_KEY</code>
+                                以加载真实地图数据。
                             </p>
                         </div>
 
-                        <div className="relative h-full w-full">
-                            <div className="absolute inset-6 rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur">
-                                <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                                    <span className="inline-flex items-center rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-100">
-                                        地图预留区域
-                                    </span>
-                                    <p className="text-sm text-slate-100/80">
-                                        上传行程后自动生成路线与热度图，支持放大缩小和收藏地点。
-                                    </p>
-                                </div>
-                            </div>
+                        <div className="flex-1 px-6 pb-6 pt-4">
+                            <MapPreview apiKey={amapApiKey} />
                         </div>
 
                         <div className="flex flex-col gap-2 border-t border-white/10 px-6 py-4 text-xs text-slate-200/70 sm:flex-row sm:items-center sm:justify-between">
@@ -192,7 +187,7 @@ export default function DashboardClient() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
                     <p className="font-medium text-slate-900">实现建议</p>
                     <ul className="mt-2 space-y-1 text-xs leading-relaxed text-slate-500">
-                        <li>• 使用 Mapbox GL、Leaflet 或高德 JS SDK 渲染真实地图。</li>
+                        <li>• 配置 <code className="rounded bg-slate-100 px-1">NEXT_PUBLIC_AMAP_API_KEY</code> 加载在线地图。</li>
                         <li>• 结合行程列表生成折线路径与 POI 标注。</li>
                         <li>• 支持“收藏/避开”操作与实时距离估算。</li>
                     </ul>
