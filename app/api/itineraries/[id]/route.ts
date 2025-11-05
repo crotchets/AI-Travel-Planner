@@ -89,3 +89,28 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ data: mapTripRowToRecord(data as TripPlanRow) })
 }
+
+export async function DELETE(_request: Request, { params }: RouteContext) {
+    const supabase = createRouteHandlerClient({ cookies })
+    const {
+        data: { user }
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+        return NextResponse.json({ error: '未授权，请先登录。' }, { status: 401 })
+    }
+
+    const { id } = params
+
+    const { error } = await supabase
+        .from(TRIP_TABLE_NAME)
+        .delete()
+        .eq('user_id', user.id)
+        .eq('id', id)
+
+    if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return new NextResponse(null, { status: 204 })
+}

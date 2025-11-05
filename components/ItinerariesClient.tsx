@@ -28,6 +28,7 @@ export default function ItinerariesClient() {
 
     const [detailPlan, setDetailPlan] = useState<TripPlanRecord | null>(null)
     const [detailOpen, setDetailOpen] = useState(false)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
 
     const planIdQuery = searchParams?.get('planId') ?? null
 
@@ -176,6 +177,46 @@ export default function ItinerariesClient() {
         updatePlanIdQuery(null, { replace: true })
     }, [updatePlanIdQuery])
 
+    const handleDelete = useCallback(
+        async (plan: TripPlanRecord) => {
+            if (!user) {
+                setError('未授权，请先登录。')
+                return
+            }
+
+            const confirmed = window.confirm(`确定要删除行程「${plan.city} · ${plan.start_date} - ${plan.end_date}」吗？该操作无法撤销。`)
+            if (!confirmed) return
+
+            setDeletingId(plan.id)
+            setError(null)
+            try {
+                const response = await fetch(`/api/itineraries/${plan.id}`, { method: 'DELETE' })
+                if (!response.ok) {
+                    const payload = (await response.json()) as ApiResponse<null>
+                    throw new Error(payload.error || '删除行程失败。')
+                }
+
+                setPlans(prev => prev.filter(item => item.id !== plan.id))
+
+                if (editingId === plan.id) {
+                    cancelEdit()
+                }
+
+                if (detailPlan?.id === plan.id) {
+                    setDetailOpen(false)
+                    setDetailPlan(null)
+                    updatePlanIdQuery(null, { replace: true })
+                }
+            } catch (err) {
+                console.error(err)
+                setError(err instanceof Error ? err.message : '删除行程失败。')
+            } finally {
+                setDeletingId(null)
+            }
+        },
+        [user, cancelEdit, detailPlan, editingId, updatePlanIdQuery]
+    )
+
     const planSummary = useCallback((plan: TripPlanRecord) => {
         const dayCount = plan.days.length
         const attractions = plan.days.reduce((total, day) => total + day.attractions.length, 0)
@@ -255,6 +296,14 @@ export default function ItinerariesClient() {
                                                 className="rounded-full border border-blue-500 px-3 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
                                             >
                                                 编辑
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDelete(plan)}
+                                                disabled={deletingId === plan.id}
+                                                className="rounded-full border border-red-500 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-red-300 disabled:text-red-300"
+                                            >
+                                                {deletingId === plan.id ? '删除中…' : '删除'}
                                             </button>
                                         </div>
                                     </div>
