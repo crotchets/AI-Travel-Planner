@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import {
     useCallback,
+    useEffect,
     useMemo,
     useRef,
     useState,
@@ -12,6 +13,7 @@ import {
 import { useAuth } from './AuthProvider'
 import ItineraryInputForm from './ItineraryInputForm'
 import MapPreview from './MapPreview'
+import type { TripPlanRecord } from '../types/trip'
 
 const MIN_RATIO = 0.35
 const MAX_RATIO = 0.75
@@ -22,6 +24,38 @@ export default function DashboardClient() {
     const isDraggingRef = useRef(false)
     const [panelRatio, setPanelRatio] = useState(0.6)
     const amapApiKey = process.env.NEXT_PUBLIC_AMAP_API_KEY
+    const [recentPlans, setRecentPlans] = useState<TripPlanRecord[]>([])
+    const [isLoadingPlans, setIsLoadingPlans] = useState(false)
+    const [plansError, setPlansError] = useState<string | null>(null)
+
+    const fetchRecentPlans = useCallback(async () => {
+        if (!user) {
+            setRecentPlans([])
+            setPlansError(null)
+            setIsLoadingPlans(false)
+            return
+        }
+        setIsLoadingPlans(true)
+        setPlansError(null)
+        try {
+            const response = await fetch('/api/itineraries?limit=3', { method: 'GET' })
+            const payload = await response.json()
+            if (!response.ok) {
+                throw new Error(payload?.error || '获取行程失败。')
+            }
+            const list = Array.isArray(payload?.data) ? (payload.data as TripPlanRecord[]) : []
+            setRecentPlans(list.slice(0, 3))
+        } catch (err) {
+            console.error(err)
+            setPlansError(err instanceof Error ? err.message : '加载行程时出现问题。')
+        } finally {
+            setIsLoadingPlans(false)
+        }
+    }, [user])
+
+    useEffect(() => {
+        void fetchRecentPlans()
+    }, [fetchRecentPlans])
 
     const clampRatio = useCallback((value: number) => {
         return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value))
@@ -93,14 +127,67 @@ export default function DashboardClient() {
                 {user ? (
                     <>
                         <ItineraryInputForm
-                            onSubmit={async payload => {
-                                // TODO: 调用后端行程规划接口
-                                console.log('submit planning request', payload)
+                            onPlanCreated={record => {
+                                setRecentPlans(prev => {
+                                    const merged = [record, ...prev.filter(item => item.id !== record.id)]
+                                    return merged.slice(0, 3)
+                                })
+                                void fetchRecentPlans()
                             }}
                         />
 
-                        <section className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
-                            行程规划结果与历史记录将在这里展示。后续可以接 Supabase 数据或调用 LLM 服务生成行程卡片。
+                        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                            <header className="mb-4">
+                                <h3 className="text-lg font-semibold text-slate-900">最近生成的行程</h3>
+                                <p className="mt-1 text-sm text-slate-500">
+                                    成功提交后会自动保存到 Supabase，可在这里快速预览最新的 TripPlan。
+                                </p>
+                            </header>
+
+                            {plansError ? (
+                                <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{plansError}</p>
+                            ) : null}
+
+                            {isLoadingPlans ? (
+                                <p className="text-sm text-slate-500">正在加载最近的行程…</p>
+                            ) : recentPlans.length === 0 ? (
+                                <p className="text-sm text-slate-500">
+                                    目前还没有保存的行程。填写上方表单生成第一个 TripPlan 吧。
+                                </p>
+                            ) : (
+                                <ul className="space-y-3 text-sm text-slate-600">
+                                    {recentPlans.map(plan => (
+                                        <li key={plan.id} className="rounded-lg border border-slate-200 p-4 shadow-sm">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-slate-900">
+                                                        {plan.city} · {plan.start_date} - {plan.end_date}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">
+                                                        更新于 {new Date(plan.updated_at ?? plan.created_at).toLocaleString('zh-CN', { hour12: false })}
+                                                    </p>
+                                                </div>
+                                                <Link
+                                                    href={`/itineraries#${plan.id}`}
+                                                    className="rounded-full border border-blue-500 px-3 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
+                                                >
+                                                    查看详情
+                                                </Link>
+                                            </div>
+                                            <p className="mt-2 line-clamp-2 text-xs text-slate-500">{plan.overall_suggestions}</p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+
+                            <div className="mt-4 flex justify-end">
+                                <Link
+                                    href="/itineraries"
+                                    className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-xs font-medium text-slate-600 transition hover:border-blue-400 hover:text-blue-600"
+                                >
+                                    查看全部行程
+                                </Link>
+                            </div>
                         </section>
 
                         <div className="flex gap-2">
