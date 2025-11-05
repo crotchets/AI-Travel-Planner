@@ -230,8 +230,8 @@ export default function DashboardClient() {
                                                     }
                                                 }}
                                                 className={`rounded-lg border p-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-300 ${isSelected
-                                                        ? 'border-blue-500 bg-blue-50/60 shadow-md'
-                                                        : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
+                                                    ? 'border-blue-500 bg-blue-50/60 shadow-md'
+                                                    : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
                                                     }`}
                                             >
                                                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -248,7 +248,7 @@ export default function DashboardClient() {
                                                             <span className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-medium text-blue-600">正在查看</span>
                                                         ) : null}
                                                         <Link
-                                                            href={`/itineraries#${plan.id}`}
+                                                            href={{ pathname: '/itineraries', query: { planId: plan.id } }}
                                                             onClick={event => event.stopPropagation()}
                                                             className="rounded-full border border-blue-500 px-3 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
                                                         >

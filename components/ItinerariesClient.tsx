@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import { useAuth } from './AuthProvider'
 import ItineraryDetailDialog from './ItineraryDetailDialog'
@@ -13,6 +14,8 @@ interface ApiResponse<T> {
 
 export default function ItinerariesClient() {
     const { user } = useAuth()
+    const router = useRouter()
+    const searchParams = useSearchParams()
     const [plans, setPlans] = useState<TripPlanRecord[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -25,6 +28,27 @@ export default function ItinerariesClient() {
 
     const [detailPlan, setDetailPlan] = useState<TripPlanRecord | null>(null)
     const [detailOpen, setDetailOpen] = useState(false)
+
+    const planIdQuery = searchParams?.get('planId') ?? null
+
+    const updatePlanIdQuery = useCallback(
+        (planId: string | null, options: { replace?: boolean } = {}) => {
+            const current = searchParams ? new URLSearchParams(searchParams.toString()) : new URLSearchParams()
+            if (planId) {
+                current.set('planId', planId)
+            } else {
+                current.delete('planId')
+            }
+            const queryString = current.toString()
+            const href = queryString ? `/itineraries?${queryString}` : '/itineraries'
+            if (options.replace) {
+                router.replace(href, { scroll: false })
+            } else {
+                router.push(href, { scroll: false })
+            }
+        },
+        [router, searchParams]
+    )
 
     const loadPlans = useCallback(async () => {
         if (!user) return
@@ -44,6 +68,26 @@ export default function ItinerariesClient() {
             setIsLoading(false)
         }
     }, [user])
+
+    useEffect(() => {
+        if (!plans.length || !planIdQuery) {
+            return
+        }
+        if (detailPlan?.id === planIdQuery && detailOpen) {
+            return
+        }
+        const target = plans.find(item => item.id === planIdQuery)
+        if (target) {
+            setDetailPlan(target)
+            setDetailOpen(true)
+        }
+    }, [plans, planIdQuery, detailPlan, detailOpen])
+
+    useEffect(() => {
+        if (!planIdQuery && detailOpen) {
+            setDetailOpen(false)
+        }
+    }, [planIdQuery, detailOpen])
 
     useEffect(() => {
         void loadPlans()
@@ -118,14 +162,19 @@ export default function ItinerariesClient() {
         }
     }, [cancelEdit, editPlanJson, editRequestJson, editingId, user])
 
-    const openDetail = useCallback((plan: TripPlanRecord) => {
-        setDetailPlan(plan)
-        setDetailOpen(true)
-    }, [])
+    const openDetail = useCallback(
+        (plan: TripPlanRecord, options?: { replace?: boolean }) => {
+            setDetailPlan(plan)
+            setDetailOpen(true)
+            updatePlanIdQuery(plan.id, { replace: options?.replace })
+        },
+        [updatePlanIdQuery]
+    )
 
     const closeDetail = useCallback(() => {
         setDetailOpen(false)
-    }, [])
+        updatePlanIdQuery(null, { replace: true })
+    }, [updatePlanIdQuery])
 
     const planSummary = useCallback((plan: TripPlanRecord) => {
         const dayCount = plan.days.length
@@ -195,7 +244,7 @@ export default function ItinerariesClient() {
                                             ) : null}
                                             <button
                                                 type="button"
-                                                onClick={() => openDetail(plan)}
+                                                onClick={() => openDetail(plan, { replace: true })}
                                                 className="rounded-full border border-emerald-500 px-3 py-1 text-xs font-medium text-emerald-600 transition hover:bg-emerald-50"
                                             >
                                                 查看详情
