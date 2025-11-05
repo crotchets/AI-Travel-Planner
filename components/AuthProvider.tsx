@@ -23,6 +23,20 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         setStatus(nextUser ? 'authenticated' : 'unauthenticated')
     }, [])
 
+    const syncSessionWithServer = useCallback(async (event: string, session: any) => {
+        try {
+            await fetch('/api/auth/callback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ event, session })
+            })
+        } catch (error) {
+            console.error('sync session failed', error)
+        }
+    }, [])
+
     const refresh = useCallback(async () => {
         setStatus('loading')
         try {
@@ -30,15 +44,19 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             if (error) {
                 console.error('auth refresh error', error)
                 setUserState(null)
+                await syncSessionWithServer('SIGNED_OUT', null)
                 return
             }
-            const sessionUser = data?.session?.user ?? null
+            const session = data?.session ?? null
+            const sessionUser = session?.user ?? null
             setUserState(sessionUser)
+            await syncSessionWithServer(sessionUser ? 'SIGNED_IN' : 'SIGNED_OUT', session)
         } catch (err) {
             console.error('auth refresh exception', err)
             setUserState(null)
+            await syncSessionWithServer('SIGNED_OUT', null)
         }
-    }, [setUserState])
+    }, [setUserState, syncSessionWithServer])
 
     useEffect(() => {
         let cancelled = false
@@ -49,14 +67,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             if (cancelled) return
             const nextUser = session?.user ?? null
             setUserState(nextUser)
+            void syncSessionWithServer(_event, session)
         })
 
         return () => {
             cancelled = true
             data?.subscription?.unsubscribe()
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [refresh, setUserState])
+    }, [refresh, setUserState, syncSessionWithServer])
 
     const value = useMemo<AuthContextValue>(
         () => ({ user, status, setUserState, refresh }),
