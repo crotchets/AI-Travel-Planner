@@ -12,27 +12,65 @@ import {
 } from 'react'
 import { useAuth } from './AuthProvider'
 import ItineraryInputForm from './ItineraryInputForm'
-import MapPreview from './MapPreview'
 import type { TripPlanRecord } from '../types/trip'
 
 const MIN_RATIO = 0.35
 const MAX_RATIO = 0.75
+
+function formatDateDisplay(value: string) {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+        return value
+    }
+    return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+}
+
+function formatDateTimeDisplay(value: string) {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+        return value
+    }
+    return new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).format(date)
+}
+
+function formatCurrency(amount: number | undefined, currency = 'CNY') {
+    if (typeof amount !== 'number' || Number.isNaN(amount)) {
+        return null
+    }
+    try {
+        return new Intl.NumberFormat('zh-CN', {
+            style: 'currency',
+            currency,
+            maximumFractionDigits: 0
+        }).format(amount)
+    } catch {
+        return `${amount}${currency ? ` ${currency}` : ''}`
+    }
+}
 
 export default function DashboardClient() {
     const { user } = useAuth()
     const containerRef = useRef<HTMLDivElement>(null)
     const isDraggingRef = useRef(false)
     const [panelRatio, setPanelRatio] = useState(0.6)
-    const amapApiKey = process.env.NEXT_PUBLIC_AMAP_API_KEY
     const [recentPlans, setRecentPlans] = useState<TripPlanRecord[]>([])
     const [isLoadingPlans, setIsLoadingPlans] = useState(false)
     const [plansError, setPlansError] = useState<string | null>(null)
+    const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
 
     const fetchRecentPlans = useCallback(async () => {
         if (!user) {
             setRecentPlans([])
             setPlansError(null)
             setIsLoadingPlans(false)
+            setSelectedPlanId(null)
             return
         }
         setIsLoadingPlans(true)
@@ -56,6 +94,19 @@ export default function DashboardClient() {
     useEffect(() => {
         void fetchRecentPlans()
     }, [fetchRecentPlans])
+
+    useEffect(() => {
+        if (recentPlans.length === 0) {
+            setSelectedPlanId(null)
+            return
+        }
+        setSelectedPlanId(prev => {
+            if (prev && recentPlans.some(plan => plan.id === prev)) {
+                return prev
+            }
+            return recentPlans[0]?.id ?? null
+        })
+    }, [recentPlans])
 
     const clampRatio = useCallback((value: number) => {
         return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value))
@@ -112,6 +163,13 @@ export default function DashboardClient() {
         } as CSSProperties
     }, [panelRatio])
 
+    const selectedPlan = useMemo(() => {
+        if (!selectedPlanId) {
+            return null
+        }
+        return recentPlans.find(plan => plan.id === selectedPlanId) ?? null
+    }, [recentPlans, selectedPlanId])
+
     return (
         <div
             ref={containerRef}
@@ -132,6 +190,7 @@ export default function DashboardClient() {
                                     const merged = [record, ...prev.filter(item => item.id !== record.id)]
                                     return merged.slice(0, 3)
                                 })
+                                setSelectedPlanId(record.id)
                                 void fetchRecentPlans()
                             }}
                         />
@@ -156,27 +215,53 @@ export default function DashboardClient() {
                                 </p>
                             ) : (
                                 <ul className="space-y-3 text-sm text-slate-600">
-                                    {recentPlans.map(plan => (
-                                        <li key={plan.id} className="rounded-lg border border-slate-200 p-4 shadow-sm">
-                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                <div>
-                                                    <p className="text-sm font-semibold text-slate-900">
-                                                        {plan.city} · {plan.start_date} - {plan.end_date}
-                                                    </p>
-                                                    <p className="text-xs text-slate-500">
-                                                        更新于 {new Date(plan.updated_at ?? plan.created_at).toLocaleString('zh-CN', { hour12: false })}
-                                                    </p>
+                                    {recentPlans.map(plan => {
+                                        const isSelected = selectedPlan?.id === plan.id
+                                        return (
+                                            <li
+                                                key={plan.id}
+                                                tabIndex={0}
+                                                role="button"
+                                                onClick={() => setSelectedPlanId(plan.id)}
+                                                onKeyDown={event => {
+                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                        event.preventDefault()
+                                                        setSelectedPlanId(plan.id)
+                                                    }
+                                                }}
+                                                className={`rounded-lg border p-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-300 ${isSelected
+                                                        ? 'border-blue-500 bg-blue-50/60 shadow-md'
+                                                        : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
+                                                    }`}
+                                            >
+                                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-900">
+                                                            {plan.city} · {formatDateDisplay(plan.start_date)} - {formatDateDisplay(plan.end_date)}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500">
+                                                            更新于 {formatDateTimeDisplay(plan.updated_at ?? plan.created_at)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {isSelected ? (
+                                                            <span className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-medium text-blue-600">正在查看</span>
+                                                        ) : null}
+                                                        <Link
+                                                            href={`/itineraries#${plan.id}`}
+                                                            onClick={event => event.stopPropagation()}
+                                                            className="rounded-full border border-blue-500 px-3 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
+                                                        >
+                                                            在页面中打开
+                                                        </Link>
+                                                    </div>
                                                 </div>
-                                                <Link
-                                                    href={`/itineraries#${plan.id}`}
-                                                    className="rounded-full border border-blue-500 px-3 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
-                                                >
-                                                    查看详情
-                                                </Link>
-                                            </div>
-                                            <p className="mt-2 line-clamp-2 text-xs text-slate-500">{plan.overall_suggestions}</p>
-                                        </li>
-                                    ))}
+                                                <p className="mt-2 line-clamp-3 text-xs text-slate-500">
+                                                    {plan.overall_suggestions}
+                                                </p>
+                                            </li>
+                                        )
+                                    })}
                                 </ul>
                             )}
 
@@ -242,43 +327,176 @@ export default function DashboardClient() {
             </div>
 
             <aside className="space-y-4 lg:sticky lg:top-24">
-                <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-white shadow-xl">
-                    <div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.35),rgba(15,23,42,0.95))]"
-                    />
-                    <div className="relative flex h-[340px] flex-col sm:h-[380px] lg:h-[480px]">
-                        <div className="p-6 pb-0">
-                            <p className="text-xs uppercase tracking-[0.3em] text-blue-200/80">地图概览</p>
-                            <h3 className="mt-4 text-xl font-semibold">旅程目的地</h3>
-                            <p className="mt-2 text-sm text-slate-200/90">
-                                基于高德地图 Web JS API 展示行程目的地、酒店与景点标记。当前默认使用占位 Key，请在环境变量中设置
-                                <code className="mx-1 rounded bg-white/10 px-1 text-[11px] tracking-wide">NEXT_PUBLIC_AMAP_API_KEY</code>
-                                以加载真实地图数据。
+                {selectedPlan ? (
+                    <div className="space-y-4">
+                        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+                            <header className="space-y-2">
+                                <p className="text-xs uppercase tracking-[0.35em] text-blue-500/70">当前行程</p>
+                                <h3 className="text-xl font-semibold text-slate-900">
+                                    {selectedPlan.city} · {formatDateDisplay(selectedPlan.start_date)} - {formatDateDisplay(selectedPlan.end_date)}
+                                </h3>
+                                <p className="text-sm text-slate-500">
+                                    共 {selectedPlan.days.length} 天行程 · 保存于 {formatDateTimeDisplay(selectedPlan.updated_at ?? selectedPlan.created_at)}
+                                </p>
+                            </header>
+                            <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-slate-600">
+                                {selectedPlan.overall_suggestions}
                             </p>
-                        </div>
+                        </section>
 
-                        <div className="flex-1 px-6 pb-6 pt-4">
-                            <MapPreview apiKey={amapApiKey} />
-                        </div>
+                        {selectedPlan.weather_info.length > 0 ? (
+                            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                                <h4 className="text-sm font-semibold text-slate-900">天气预报</h4>
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                    {selectedPlan.weather_info.map(item => (
+                                        <div
+                                            key={`${item.date}-${item.condition}`}
+                                            className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600"
+                                        >
+                                            <p className="text-sm font-medium text-slate-900">{formatDateDisplay(item.date)}</p>
+                                            <p className="mt-1 text-slate-500">{item.condition}</p>
+                                            <p className="mt-1 text-slate-500">温度：{item.temperature}°C</p>
+                                            {item.wind ? <p className="mt-1 text-slate-400">风速：{item.wind}</p> : null}
+                                            {typeof item.humidity === 'number' ? (
+                                                <p className="mt-1 text-slate-400">湿度：{item.humidity}%</p>
+                                            ) : null}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        ) : null}
 
-                        <div className="flex flex-col gap-2 border-t border-white/10 px-6 py-4 text-xs text-slate-200/70 sm:flex-row sm:items-center sm:justify-between">
-                            <span>下一步：接入地图 SDK</span>
-                            <button className="w-full rounded-full bg-blue-500/20 px-3 py-1 text-[11px] font-medium text-blue-100 transition hover:bg-blue-500/30 sm:w-auto">
-                                查看规划路线
-                            </button>
-                        </div>
+                        {selectedPlan.budget ? (
+                            <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 shadow-sm">
+                                <header className="flex flex-wrap items-center justify-between gap-2">
+                                    <h4 className="text-sm font-semibold text-emerald-900">预算概览</h4>
+                                    {formatCurrency(selectedPlan.budget.total, selectedPlan.budget.currency ?? 'CNY') ? (
+                                        <span className="text-sm font-medium text-emerald-700">
+                                            {formatCurrency(selectedPlan.budget.total, selectedPlan.budget.currency ?? 'CNY')}
+                                        </span>
+                                    ) : null}
+                                </header>
+                                {selectedPlan.budget.notes ? (
+                                    <p className="mt-2 text-xs text-emerald-700/80">{selectedPlan.budget.notes}</p>
+                                ) : null}
+                                {selectedPlan.budget.categories.length > 0 ? (
+                                    <ul className="mt-3 space-y-2 text-xs text-emerald-800">
+                                        {selectedPlan.budget.categories.map(category => (
+                                            <li key={`${category.label}-${category.amount}`} className="flex items-center justify-between rounded-lg bg-white/70 px-3 py-2">
+                                                <span>{category.label}</span>
+                                                <span>
+                                                    {formatCurrency(category.amount, category.currency ?? selectedPlan.budget?.currency ?? 'CNY') ?? category.amount}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                            </section>
+                        ) : null}
+
+                        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <header>
+                                <h4 className="text-sm font-semibold text-slate-900">每日行程</h4>
+                                <p className="mt-1 text-xs text-slate-500">包含交通、住宿、景点与餐饮安排</p>
+                            </header>
+
+                            <div className="space-y-4">
+                                {selectedPlan.days.map(day => (
+                                    <article key={`${day.day_index}-${day.date}`} className="rounded-xl border border-slate-100 bg-slate-50/80 p-4 text-sm text-slate-600">
+                                        <header className="flex flex-wrap items-center justify-between gap-2 text-slate-700">
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                    第 {day.day_index} 天 · {formatDateDisplay(day.date)}
+                                                </p>
+                                                {day.description ? <p className="mt-1 text-sm text-slate-700">{day.description}</p> : null}
+                                            </div>
+                                            {day.transportation ? (
+                                                <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-600">
+                                                    {day.transportation}
+                                                </span>
+                                            ) : null}
+                                        </header>
+
+                                        {day.hotel ? (
+                                            <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                                                <p className="font-medium text-slate-800">住宿：{day.hotel.name}</p>
+                                                {day.hotel.address ? <p className="mt-1 text-slate-500">地址：{day.hotel.address}</p> : null}
+                                                {day.hotel.price_range ? (
+                                                    <p className="mt-1 text-slate-500">价格区间：{day.hotel.price_range}</p>
+                                                ) : null}
+                                            </div>
+                                        ) : day.accommodation ? (
+                                            <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-slate-600">住宿：{day.accommodation}</p>
+                                        ) : null}
+
+                                        {day.attractions.length > 0 ? (
+                                            <div className="mt-3 space-y-2">
+                                                <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">景点安排</h5>
+                                                <ul className="space-y-2">
+                                                    {day.attractions.map((attraction, index) => (
+                                                        <li key={`${attraction.name}-${index}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                                                            <p className="font-medium text-slate-800">{attraction.name}</p>
+                                                            {attraction.category ? <p className="mt-1 text-slate-500">类型：{attraction.category}</p> : null}
+                                                            {attraction.description ? (
+                                                                <p className="mt-1 text-slate-500">{attraction.description}</p>
+                                                            ) : null}
+                                                            {typeof attraction.estimated_duration_hours === 'number' ? (
+                                                                <p className="mt-1 text-slate-500">建议停留 {attraction.estimated_duration_hours} 小时</p>
+                                                            ) : null}
+                                                            {typeof attraction.ticket_price === 'number' ? (
+                                                                <p className="mt-1 text-slate-500">
+                                                                    门票：
+                                                                    {formatCurrency(
+                                                                        attraction.ticket_price,
+                                                                        attraction.currency ?? selectedPlan.budget?.currency ?? 'CNY'
+                                                                    ) ?? `${attraction.ticket_price}${attraction.currency ? ` ${attraction.currency}` : ''}`}
+                                                                </p>
+                                                            ) : null}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ) : null}
+
+                                        {day.meals.length > 0 ? (
+                                            <div className="mt-3 space-y-2">
+                                                <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">餐饮推荐</h5>
+                                                <ul className="space-y-2">
+                                                    {day.meals.map((meal, index) => (
+                                                        <li key={`${meal.name}-${index}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                                                            <p className="font-medium text-slate-800">{meal.type} · {meal.name}</p>
+                                                            {meal.description ? <p className="mt-1 text-slate-500">{meal.description}</p> : null}
+                                                            {meal.address ? <p className="mt-1 text-slate-500">地址：{meal.address}</p> : null}
+                                                            {typeof meal.estimated_cost === 'number' ? (
+                                                                <p className="mt-1 text-slate-500">
+                                                                    预计消费：
+                                                                    {formatCurrency(
+                                                                        meal.estimated_cost,
+                                                                        meal.currency ?? selectedPlan.budget?.currency ?? 'CNY'
+                                                                    ) ?? `${meal.estimated_cost}${meal.currency ? ` ${meal.currency}` : ''}`}
+                                                                </p>
+                                                            ) : null}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ) : null}
+                                    </article>
+                                ))}
+                            </div>
+                        </section>
                     </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-                    <p className="font-medium text-slate-900">实现建议</p>
-                    <ul className="mt-2 space-y-1 text-xs leading-relaxed text-slate-500">
-                        <li>• 配置 <code className="rounded bg-slate-100 px-1">NEXT_PUBLIC_AMAP_API_KEY</code> 加载在线地图。</li>
-                        <li>• 结合行程列表生成折线路径与 POI 标注。</li>
-                        <li>• 支持“收藏/避开”操作与实时距离估算。</li>
-                    </ul>
-                </div>
+                ) : (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+                        <h3 className="text-lg font-semibold text-slate-900">等待生成行程</h3>
+                        <p className="mt-2 text-sm text-slate-500">
+                            提交左侧表单或从“最近生成的行程”选中一条记录，即可在此查看完整行程详情。
+                        </p>
+                        <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+                            小贴士：生成行程后会自动保存至 Supabase，可在“我的行程”页面进行编辑与分享。
+                        </p>
+                    </div>
+                )}
             </aside>
         </div>
     )
