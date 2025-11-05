@@ -181,45 +181,258 @@
 - **配置管理**：使用 Vercel/Supabase 环境变量，结合 Doppler/1Password 共享。
 - **合规**：隐私政策页面，提供数据导出与删除功能。
 
-## 8. 数据结构（MVP 示例）
+## 8. 数据结构（现网实现）
 
-### 8.1 行程表 `itineraries`
+### 8.1 TypeScript 核心类型
+
+#### TripRequest
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| city | string | ✅ | 旅行目的地城市。|
+| start_date | string | ✅ | ISO8601 日期（YYYY-MM-DD），行程开始日。|
+| end_date | string | ✅ | ISO8601 日期，行程结束日。|
+| travel_days | number | ⭕️ | 行程天数，正整数，可由开始/结束日期推导时省略。|
+| transportation | string | ⭕️ | 交通偏好，例如 `public`、`self-driving`、`walking`、`mixed`。|
+| accommodation | string | ⭕️ | 住宿偏好，例如 `budget`、`boutique`、`family`、`luxury`。|
+| preferences | string[] | ⭕️ | 兴趣标签数组，元素为非空字符串。|
+| budget_level | string | ⭕️ | 预算档位，例如 `economy`、`moderate`、`premium`。|
+| free_text_input | string | ⭕️ | 用户补充的自由描述文本。|
+
+#### TripPlan
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| city | string | ✅ | 行程对应城市。|
+| start_date | string | ✅ | ISO8601 日期，行程开始日。|
+| end_date | string | ✅ | ISO8601 日期，行程结束日。|
+| days | DayPlan[] | ✅ | 每日行程数组，至少 1 天。|
+| weather_info | WeatherInfo[] | ✅ | 与行程日期对应的天气信息数组。|
+| overall_suggestions | string | ✅ | 对整个行程的综合建议。|
+| budget | Budget | ⭕️ | 预算汇总与分类结构，可为空缺。|
+
+#### DayPlan
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| date | string | ✅ | ISO8601 日期，对应当天。|
+| day_index | number | ✅ | 天数索引，从 1 开始。|
+| description | string | ⭕️ | 当日摘要。|
+| transportation | string | ⭕️ | 当日交通说明。|
+| accommodation | string | ⭕️ | 当日住宿摘要。|
+| hotel | Hotel | ⭕️ | 推荐酒店信息。|
+| attractions | Attraction[] | ✅ | 当日景点列表。|
+| meals | Meal[] | ✅ | 当日餐食列表。|
+
+#### Attraction
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| name | string | ✅ | 景点名称。|
+| description | string | ⭕️ | 景点描述或亮点。|
+| category | string | ⭕️ | 景点类别标签。|
+| address | string | ⭕️ | 详细地址。|
+| latitude | number | ⭕️ | 纬度。|
+| longitude | number | ⭕️ | 经度。|
+| rating | number | ⭕️ | 推荐评分或热度。|
+| estimated_duration_hours | number | ⭕️ | 建议停留时长（小时）。|
+| ticket_price | number | ⭕️ | 门票价格。|
+| currency | string | ⭕️ | 门票货币代码。|
+| image_url | string | ⭕️ | 图片或宣传图链接。|
+
+#### Meal
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| name | string | ✅ | 餐厅或餐食名称。|
+| type | string | ✅ | 餐别，例如 `breakfast`、`lunch`、`dinner`。|
+| description | string | ⭕️ | 推荐理由。|
+| address | string | ⭕️ | 餐厅地址。|
+| estimated_cost | number | ⭕️ | 预估消费。|
+| currency | string | ⭕️ | 金额货币代码。|
+
+#### WeatherInfo
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| date | string | ✅ | ISO8601 日期。|
+| temperature | number | ✅ | 当日温度（℃）。|
+| condition | string | ✅ | 天气描述，如“多云”。|
+| wind | string | ⭕️ | 风力/风向。|
+| humidity | number | ⭕️ | 相对湿度（百分比）。|
+
+#### Budget 与 BudgetCategory
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| total | number | ✅ | 预算总额。|
+| currency | string | ⭕️ | 总额货币代码。|
+| notes | string | ⭕️ | 预算备注。|
+| categories | BudgetCategory[] | ✅ | 预算分类数组。|
+
+BudgetCategory 字段说明：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| label | string | ✅ | 分类名称，例如“交通”。|
+| amount | number | ✅ | 分类金额。|
+| currency | string | ⭕️ | 分类货币代码，未提供时继承总额货币。|
+
+#### TripPlanRecord（返回给前端的保存结果）
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| id | uuid | 主键 |
-| user_id | uuid | 用户 ID |
-| title | text | 行程标题 |
-| destination | text | 目的地 |
-| start_date | date | 出发日期 |
-| end_date | date | 结束日期 |
-| budget_total | integer | 总预算（单位：分） |
-| preferences | jsonb | 偏好标签集合 |
-| itinerary_plan | jsonb | 按日行程详情 |
-| created_at | timestamptz | 创建时间 |
-| updated_at | timestamptz | 更新时间 |
+| id | string | Supabase 行程记录主键。|
+| user_id | string | 拥有者用户 ID。|
+| city/start_date/end_date | string | 冗余行程基本信息。|
+| days | DayPlan[] | 同 TripPlan.days。|
+| weather_info | WeatherInfo[] | 同 TripPlan.weather_info。|
+| overall_suggestions | string | 行程总结。|
+| budget | `Budget \| undefined` | 预算详情，无则为 `undefined`。|
+| request | `TripRequest \| null` | 创建该行程时的原始请求。|
+| created_at | string | ISO 时间戳。|
+| updated_at | `string \| undefined` | 最近更新时间。|
 
-### 8.2 预算记录表 `expenses`
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| id | uuid | 主键 |
-| itinerary_id | uuid | 关联行程 |
-| category | text | 费用类别 |
-| amount | integer | 金额（单位：分） |
-| description | text | 描述 |
-| record_time | timestamptz | 记录时间 |
-| source | text | 录入方式（voice/manual） |
-
-### 8.3 用户偏好表 `user_preferences`
+#### TripPlanRow（Supabase 查询返回的原始结构）
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| user_id | uuid | 主键 |
-| default_budget | integer | 常用预算 |
-| interests | jsonb | 兴趣标签 |
-| travel_style | text | 旅行风格（亲子/小众/轻松等） |
-| locale | text | 常用语言 |
+| id | string | 行程主键。|
+| user_id | string | 所属用户。|
+| city | string | 行程城市。|
+| start_date | string | 行程开始日期。|
+| end_date | string | 行程结束日期。|
+| plan_days | DayPlan[] | 存储于 JSONB 列。|
+| weather | WeatherInfo[] | 存储于 JSONB 列。|
+| overall_suggestions | string | 行程总结。|
+| budget | `Budget \| null` | JSONB 列，可为空。|
+| request | `TripRequest \| null` | 原始请求 JSON。|
+| created_at | string | 记录创建时间。|
+| updated_at | `string \| undefined` | 记录更新时间。|
+
+### 8.2 百炼模型 JSON Schema
+
+- **TripRequestSchema**：与上文 TripRequest 字段完全一致，强制 `city`、`start_date`、`end_date` 为必填，`additionalProperties: false` 防止多余字段。若模型无法生成，需返回 `{"error":"TripRequest generation failed"}`。
+- **TripPlanSchema**：约束 TripPlan 结构，包含嵌套的 DayPlan/Attraction/Meal/WeatherInfo/Budget 字段，所有数组均要求元素为对象且去除未定义字段。错误时返回 `{"error":"TripPlan generation failed"}`。
+
+这两个 Schema 以 `response_format.type = 'json_schema'` 方式传递给百炼接口，保证模型输出严格符合前端/数据库类型定义。
+
+### 8.3 Supabase 表结构
+
+当前仅持久化行程记录，使用 `trip_plan` 表：
+
+| 字段 | 类型（建议） | 说明 |
+| --- | --- | --- |
+| id | uuid | 主键，由 Supabase 自动生成。|
+| user_id | uuid | 所属用户 ID，受 RLS 约束。|
+| city | text | 冗余存储行程城市。|
+| start_date | date | 行程开始日期。|
+| end_date | date | 行程结束日期。|
+| plan_days | jsonb | 对应 TripPlan.days。|
+| weather | jsonb | 对应 TripPlan.weather_info。|
+| overall_suggestions | text | 行程总结。|
+| budget | jsonb | TripPlan.budget，允许为 null。|
+| request | jsonb | TripRequest 原始请求，允许为 null。|
+| created_at | timestamptz | 默认 `now()`。|
+| updated_at | timestamptz | 可由触发器更新。|
+
+后续若增加预算或偏好表，可在此节补充扩展表结构。
+
+### 8.4 后端 API 接口契约
+
+#### POST `/api/trip-request/extract`
+
+- **请求体**：`{ "prompt": string }`
+- **成功响应**：`{ "data": TripRequest }`
+- **错误响应**：`{ "error": string }`
+- **鉴权**：需 Supabase 登录态。
+
+#### POST `/api/planner/generate`
+
+- **请求体**：
+
+  ```json
+  {
+    "request": TripRequest,
+    "prompt": "可选的额外偏好文字"
+  }
+  ```
+
+- **成功响应**：`{ "data": TripPlanRecord }`
+- **错误响应**：`{ "error": string }`
+- **鉴权**：需 Supabase 登录态。
+
+#### GET `/api/itineraries`
+
+- **成功响应**：`{ "data": TripPlanRecord[] }`
+- **错误响应**：`{ "error": string }`
+- **鉴权**：需登录，查询当前用户全部行程，按 `created_at` 倒序。
+
+#### POST `/api/itineraries`
+
+- **请求体**：`{ "plan": TripPlan, "request": TripRequest | null }`
+- **成功响应**：`{ "data": TripPlanRecord }`（状态码 201）
+- **错误响应**：`{ "error": string }`
+- **鉴权**：需登录。
+
+#### GET `/api/itineraries/{id}`
+
+- **成功响应**：`{ "data": TripPlanRecord }`
+- **错误响应**：`{ "error": string }`
+- **鉴权**：需登录且只能访问本人记录。
+
+#### PUT `/api/itineraries/{id}`
+
+- **请求体**：`{ "plan": TripPlan, "request": TripRequest | null }`
+- **成功响应**：`{ "data": TripPlanRecord }`
+- **错误响应**：`{ "error": string }`
+- **鉴权**：需登录且只能更新本人记录。
+
+#### POST `/api/auth/callback`
+
+- **请求体**：Supabase Auth Webhook 格式 `{ "event": string, "session": object }`
+- **成功响应**：`{ "success": true }`
+- **错误响应**：无（异常时返回 500）。
+
+#### POST `/api/auth/signout`
+
+- **请求体**：空。
+- **成功响应**：`{ "ok": true }`
+- **错误响应**：`{ "ok": false, "error": string }`
+
+#### POST `/api/transcribe/iflytek`
+
+- **请求体**：
+
+  ```json
+  {
+    "audio": "base64-encoded PCM" | null,
+    "pcm": "base64-encoded PCM" | null,
+    "sampleRate": number,
+    "business": object // 可选，覆写默认语言/领域配置
+  }
+  ```
+
+- **成功响应**：
+
+  ```json
+  {
+    "transcript": "完整转写文本",
+    "segments": [
+      { "sn": number, "ws": [{ "cw": [{ "w": string }] }], "pgs": "rpl" | null, "rg": [number, number] | null }
+    ],
+    "sid": "讯飞会话 ID",
+    "message": "讯飞接口返回描述"
+  }
+  ```
+
+- **错误响应**：`{ "error": string }`
+- **鉴权**：无需登录，但需在服务端配置讯飞凭证。
+
+### 8.5 前端表单与录音载荷
+
+- **ItineraryInputForm 表单状态**：使用 `TripRequestFormState` 保存字符串格式的输入字段，提交前转换为 TripRequest。字段包括 `city`、`start_date`、`end_date`、`travel_days`、`transportation`、`accommodation`、`preferences`、`budget_level`、`free_text_input`。
+- **语音录音上传**：浏览器将 WebM 音频转换为 PCM Base64，并携带 `sampleRate` 字段上传到 `/api/transcribe/iflytek`。当选择浏览器内置识别时无服务器请求。
 
 ## 9. 竞争分析（简要）
 

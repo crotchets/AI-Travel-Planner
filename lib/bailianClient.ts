@@ -188,6 +188,74 @@ function ensureEnv(name: string, value: string | undefined) {
     }
 }
 
+function formatSchema(schema: unknown) {
+    return JSON.stringify(schema, null, 2)
+}
+
+function buildJsonOnlyRequirements(schemaLabel: string) {
+    return [
+        '## 输出规范',
+        '1. 仅返回一段合法 JSON，禁止附加任何解释、前缀或 Markdown 代码块标记。',
+        '2. JSON 必须完全符合下方 Schema，未提及的可选字段请直接省略，不要输出 null。',
+        '3. 确保所有字符串使用双引号包裹，布尔与数字类型保持原生格式。',
+        `4. 如果无法生成，请返回 {"error":"${schemaLabel} generation failed"} 并说明原因。`
+    ].join('\n')
+}
+
+function buildExtractionSystemPrompt() {
+    return [
+        '## 角色',
+        '你是一名旅行需求抽取助手，负责从自然语言中提取结构化字段。',
+        '## 任务目标',
+        '读取用户的旅行描述，并按 TripRequest Schema 抽取对应字段。',
+        buildJsonOnlyRequirements('TripRequest'),
+        '## TripRequest Schema',
+        formatSchema(TRIP_REQUEST_SCHEMA)
+    ].join('\n\n')
+}
+
+function buildExtractionUserPrompt(prompt: string) {
+    return [
+        '## 用户旅行描述',
+        prompt.trim(),
+        '## 补充说明',
+        '- 如未提及字段请省略。',
+        '- 日期、预算等信息保持原格式。'
+    ].join('\n\n')
+}
+
+function buildPlanSystemPrompt() {
+    return [
+        '## 角色',
+        '你是一名资深旅行行程规划师，擅长按照用户偏好输出结构化计划。',
+        '## 任务目标',
+        '根据给定的 TripRequest，制定覆盖每日行程、预算与天气信息的 TripPlan。',
+        buildJsonOnlyRequirements('TripPlan'),
+        '## TripPlan Schema',
+        formatSchema(TRIP_PLAN_SCHEMA)
+    ].join('\n\n')
+}
+
+function buildPlanUserPrompt(request: TripRequest, hint?: string) {
+    const sections = [
+        '## TripRequest 输入',
+        JSON.stringify(request, null, 2)
+    ]
+
+    if (hint?.trim()) {
+        sections.push('## 额外偏好说明', hint.trim())
+    }
+
+    sections.push(
+        '## 规划提示',
+        '- 行程需覆盖全部日期，保持日序连续。',
+        '- attractions 至少提供 2 个条目，并包含分类、开放时间或时长估计。',
+        '- meals 字段需包含三餐或给出合理空缺说明。'
+    )
+
+    return sections.join('\n\n')
+}
+
 function parseFirstJsonObject(text: string): any {
     const trimmed = text.trim()
     if (!trimmed) {
@@ -198,9 +266,38 @@ function parseFirstJsonObject(text: string): any {
         return JSON.parse(trimmed)
     }
 
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+    if (fenced) {
+        return JSON.parse(fenced[1])
+    }
+
     const match = trimmed.match(/\{[\s\S]*\}/)
     if (match) {
-        return JSON.parse(match[0])
+        const candidate = match[0]
+        // 尝试平衡大括号，避免提前截断
+        let depth = 0
+        let endIndex = -1
+        for (let i = 0; i < trimmed.length; i += 1) {
+            const char = trimmed[i]
+            if (char === '{') {
+                depth += 1
+                if (depth === 1 && endIndex === -1) {
+                    endIndex = i
+                }
+            } else if (char === '}') {
+                depth -= 1
+                if (depth === 0) {
+                    const jsonSlice = trimmed.slice(endIndex, i + 1)
+                    try {
+                        return JSON.parse(jsonSlice)
+                    } catch {
+                        // continue searching
+                    }
+                }
+            }
+        }
+
+        return JSON.parse(candidate)
     }
 
     throw new Error('未能在模型返回中解析出 JSON 内容。')
@@ -257,12 +354,11 @@ export async function extractTripRequestFromPrompt(prompt: string): Promise<Trip
         messages: [
             {
                 role: 'system',
-                content:
-                    '你是一名旅行助手，需要从用户提供的自然语言描述中提取结构化的旅行需求。仅返回 JSON，不添加额外文字。'
+                content: buildExtractionSystemPrompt()
             },
             {
                 role: 'user',
-                content: `请从以下描述中提取旅行需求字段，未提及的字段可忽略：\n${prompt}`
+                content: buildExtractionUserPrompt(prompt)
             }
         ],
         temperature: 0,
@@ -280,7 +376,6 @@ export async function extractTripRequestFromPrompt(prompt: string): Promise<Trip
     if (!content) {
         throw new Error('百炼未返回提取结果。')
     }
-
     const json = parseFirstJsonObject(content)
 
     return {
@@ -312,14 +407,11 @@ export async function generateTripPlanFromRequest(
         messages: [
             {
                 role: 'system',
-                content:
-                    '你是一名专业旅行行程规划师，请基于输入的 TripRequest 生成详细的多日 TripPlan，并按要求返回 JSON。'
+                content: buildPlanSystemPrompt()
             },
             {
                 role: 'user',
-                content: `TripRequest: ${JSON.stringify(request)}${
-                    options.userPrompt ? `\n额外说明：${options.userPrompt}` : ''
-                }\n请返回符合 TripPlanSchema 的 JSON。`
+                content: buildPlanUserPrompt(request, options.userPrompt)
             }
         ],
         temperature: options.temperature ?? 0.6,

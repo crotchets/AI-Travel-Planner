@@ -642,22 +642,20 @@ export default function ItineraryInputForm({ onPlanCreated }: DashboardItinerary
                     <button
                         type="button"
                         onClick={() => handleProviderChange('browser')}
-                        className={`rounded-full border px-3 py-1 transition ${
-                            speechProvider === 'browser'
+                        className={`rounded-full border px-3 py-1 transition ${speechProvider === 'browser'
                                 ? 'border-blue-500 bg-blue-500/10 text-blue-600'
                                 : 'border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-600'
-                        }`}
+                            }`}
                     >
                         浏览器内置
                     </button>
                     <button
                         type="button"
                         onClick={() => handleProviderChange('iflytek')}
-                        className={`rounded-full border px-3 py-1 transition ${
-                            speechProvider === 'iflytek'
+                        className={`rounded-full border px-3 py-1 transition ${speechProvider === 'iflytek'
                                 ? 'border-blue-500 bg-blue-500/10 text-blue-600'
                                 : 'border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-600'
-                        }`}
+                            }`}
                     >
                         科大讯飞 API
                     </button>
@@ -674,13 +672,12 @@ export default function ItineraryInputForm({ onPlanCreated }: DashboardItinerary
                             }
                         }}
                         disabled={isUploadingAudio}
-                        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
-                            isRecording
+                        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${isRecording
                                 ? 'border-red-200 bg-red-50 text-red-600'
                                 : isUploadingAudio
                                     ? 'border-slate-200 bg-slate-100 text-slate-400'
                                     : 'border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:text-blue-600'
-                        }`}
+                            }`}
                     >
                         <span>
                             {isRecording
