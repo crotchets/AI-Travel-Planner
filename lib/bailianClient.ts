@@ -25,6 +25,32 @@ interface BailianChatCompletionResponse {
 
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
+type TripFormOption = {
+    value: string
+    label: string
+}
+
+const TRIP_FORM_TRANSPORTATION_OPTIONS: TripFormOption[] = [
+    { value: 'public', label: '公共交通' },
+    { value: 'self-driving', label: '自驾' },
+    { value: 'walking', label: '步行' },
+    { value: 'mixed', label: '综合出行' }
+]
+
+const TRIP_FORM_ACCOMMODATION_OPTIONS: TripFormOption[] = [
+    { value: 'budget', label: '经济型' },
+    { value: 'boutique', label: '精品/设计' },
+    { value: 'family', label: '亲子友好' },
+    { value: 'business', label: '商务舒适' },
+    { value: 'luxury', label: '高端奢华' }
+]
+
+const TRIP_FORM_BUDGET_LEVEL_OPTIONS: TripFormOption[] = [
+    { value: 'economy', label: '经济型' },
+    { value: 'moderate', label: '适中' },
+    { value: 'premium', label: '高消费' }
+]
+
 const TRIP_REQUEST_SCHEMA = {
     type: 'object',
     required: ['city', 'start_date', 'end_date'],
@@ -67,74 +93,90 @@ const TRIP_PLAN_SCHEMA = {
     required: ['city', 'start_date', 'end_date', 'days', 'weather_info', 'overall_suggestions'],
     additionalProperties: false,
     properties: {
-        city: { type: 'string' },
-        start_date: { type: 'string' },
-        end_date: { type: 'string' },
+        city: { type: 'string', description: '本次行程主要覆盖的核心城市名称，例如 “上海”。' },
+        start_date: { type: 'string', description: '行程开始日期，需采用 ISO8601 (YYYY-MM-DD) 格式。' },
+        end_date: { type: 'string', description: '行程结束日期，需采用 ISO8601 (YYYY-MM-DD) 格式。' },
         days: {
             type: 'array',
             minItems: 1,
+            description: '按日期排序的每日行程数组，每个元素对应行程的一天。',
             items: {
                 type: 'object',
                 required: ['date', 'day_index', 'attractions', 'meals'],
                 additionalProperties: false,
                 properties: {
-                    date: { type: 'string', description: '当天日期' },
+                    date: { type: 'string', description: '当天日期，ISO8601 (YYYY-MM-DD) 格式。' },
                     day_index: {
                         type: 'integer',
                         minimum: 1,
-                        description: '从 1 开始的行程天数索引'
+                        description: '从 1 开始的行程天数索引，需与数组顺序一致。'
                     },
-                    description: { type: 'string' },
-                    transportation: { type: 'string' },
-                    accommodation: { type: 'string' },
+                    description: { type: 'string', description: '当天行程的概述或主题描述。' },
+                    transportation: {
+                        type: 'string',
+                        description: '当天主要的交通方式或移动安排，可引用表单枚举值或补充说明。'
+                    },
+                    accommodation: {
+                        type: 'string',
+                        description: '住宿安排或入住区域的简述，未确定可给出参考建议。'
+                    },
                     hotel: {
                         type: 'object',
                         additionalProperties: false,
+                        description: '当天推荐入住的酒店信息，可省略。',
                         properties: {
-                            name: { type: 'string' },
-                            address: { type: 'string' },
-                            rating: { type: 'number' },
-                            price_range: { type: 'string' },
-                            latitude: { type: 'number' },
-                            longitude: { type: 'number' },
-                            distance: { type: 'string' },
-                            contact: { type: 'string' }
+                            name: { type: 'string', description: '酒店名称。' },
+                            address: { type: 'string', description: '酒店地址。' },
+                            rating: { type: 'number', description: '酒店评分，范围建议 0-5。' },
+                            price_range: { type: 'string', description: '价格区间或房价说明。' },
+                            latitude: { type: 'number', description: '酒店位置的纬度。' },
+                            longitude: { type: 'number', description: '酒店位置的经度。' },
+                            distance: { type: 'string', description: '酒店与主要景点或市中心的距离描述。' },
+                            contact: { type: 'string', description: '酒店联系方式（电话、官网等）。' }
                         }
                     },
                     attractions: {
                         type: 'array',
+                        description: '当天推荐游览的景点列表，需至少包含两个条目。',
                         items: {
                             type: 'object',
                             required: ['name'],
                             additionalProperties: false,
                             properties: {
-                                name: { type: 'string' },
-                                description: { type: 'string' },
-                                category: { type: 'string' },
-                                address: { type: 'string' },
-                                latitude: { type: 'number' },
-                                longitude: { type: 'number' },
-                                rating: { type: 'number' },
-                                estimated_duration_hours: { type: 'number' },
-                                ticket_price: { type: 'number' },
-                                currency: { type: 'string' },
-                                image_url: { type: 'string' }
+                                name: { type: 'string', description: '景点名称。' },
+                                description: { type: 'string', description: '景点亮点或游览建议。' },
+                                category: { type: 'string', description: '景点类型，例如 “文化” 或 “自然”。' },
+                                address: { type: 'string', description: '景点地址或所在区域。' },
+                                latitude: { type: 'number', description: '景点纬度。' },
+                                longitude: { type: 'number', description: '景点经度。' },
+                                rating: { type: 'number', description: '参考评分，范围建议 0-5。' },
+                                estimated_duration_hours: {
+                                    type: 'number',
+                                    description: '预估游玩时长（小时），支持小数。'
+                                },
+                                ticket_price: { type: 'number', description: '门票价格，使用 currency 指定货币。' },
+                                currency: { type: 'string', description: '门票价格使用的货币单位，例如 “CNY”。' },
+                                image_url: { type: 'string', description: '景点配图或参考图片链接，可选。' }
                             }
                         }
                     },
                     meals: {
                         type: 'array',
+                        description: '当天的餐饮安排列表，建议给出早餐/午餐/晚餐或合理说明。',
                         items: {
                             type: 'object',
                             required: ['name', 'type'],
                             additionalProperties: false,
                             properties: {
-                                name: { type: 'string' },
-                                type: { type: 'string' },
-                                description: { type: 'string' },
-                                address: { type: 'string' },
-                                estimated_cost: { type: 'number' },
-                                currency: { type: 'string' }
+                                name: { type: 'string', description: '餐厅或餐食名称。' },
+                                type: {
+                                    type: 'string',
+                                    description: '餐食类型（breakfast/lunch/dinner/snack），或其它补充说明。'
+                                },
+                                description: { type: 'string', description: '推荐理由或菜品亮点，可为空。' },
+                                address: { type: 'string', description: '餐厅地址或所在区域。' },
+                                estimated_cost: { type: 'number', description: '预估人均消费金额。' },
+                                currency: { type: 'string', description: '消费金额使用的货币单位，例如 “CNY”。' }
                             }
                         }
                     }
@@ -143,37 +185,43 @@ const TRIP_PLAN_SCHEMA = {
         },
         weather_info: {
             type: 'array',
+            description: '与行程日期对应的天气预报数组，可包含每日的温度、天气状况等信息。',
             items: {
                 type: 'object',
                 required: ['date', 'temperature', 'condition'],
                 additionalProperties: false,
                 properties: {
-                    date: { type: 'string' },
-                    temperature: { type: 'number' },
-                    condition: { type: 'string' },
-                    wind: { type: 'string' },
-                    humidity: { type: 'number' }
+                    date: { type: 'string', description: '天气对应的日期，ISO8601 (YYYY-MM-DD) 格式。' },
+                    temperature: { type: 'number', description: '当日平均或白天温度（摄氏度）。' },
+                    condition: { type: 'string', description: '天气概况，例如 “晴” 或 “小雨”。' },
+                    wind: { type: 'string', description: '风向与风力描述。' },
+                    humidity: { type: 'number', description: '相对湿度 (0-100)。' }
                 }
             }
         },
-        overall_suggestions: { type: 'string' },
+        overall_suggestions: {
+            type: 'string',
+            description: '针对整段行程的综合建议或温馨提示，可总结注意事项、交通与行李建议等。'
+        },
         budget: {
             type: 'object',
             additionalProperties: false,
+            description: '行程预算信息，可在用户要求时给出总预算与分项建议。',
             properties: {
-                total: { type: 'number' },
-                currency: { type: 'string' },
-                notes: { type: 'string' },
+                total: { type: 'number', description: '预计总预算金额。' },
+                currency: { type: 'string', description: '预算使用的货币单位，例如 “CNY”。' },
+                notes: { type: 'string', description: '其它补充说明，如预算假设、费用包含范围。' },
                 categories: {
                     type: 'array',
+                    description: '预算分项列表，例如交通、餐饮、门票等细分项目。',
                     items: {
                         type: 'object',
                         required: ['label', 'amount'],
                         additionalProperties: false,
                         properties: {
-                            label: { type: 'string' },
-                            amount: { type: 'number' },
-                            currency: { type: 'string' }
+                            label: { type: 'string', description: '预算分项名称，例如 “交通”。' },
+                            amount: { type: 'number', description: '该分项预计费用金额。' },
+                            currency: { type: 'string', description: '该分项使用的货币单位，默认沿用总预算货币。' }
                         }
                     }
                 }
@@ -185,6 +233,14 @@ const TRIP_PLAN_SCHEMA = {
 function ensureEnv(name: string, value: string | undefined) {
     if (!value) {
         throw new Error(`缺少环境变量 ${name}，请在部署前配置。`)
+    }
+}
+
+function getCurrentIsoDate() {
+    try {
+        return new Date().toISOString().slice(0, 10)
+    } catch {
+        return '未知日期'
     }
 }
 
@@ -202,12 +258,25 @@ function buildJsonOnlyRequirements(schemaLabel: string) {
     ].join('\n')
 }
 
+function formatOptionGroup(label: string, options: TripFormOption[]) {
+    const values = options.map(option => `${option.value}（${option.label}）`).join('、')
+    return `- ${label}: ${values}`
+}
+
 function buildExtractionSystemPrompt() {
+    const today = getCurrentIsoDate()
     return [
         '## 角色',
         '你是一名旅行需求抽取助手，负责从自然语言中提取结构化字段。',
         '## 任务目标',
         '读取用户的旅行描述，并按 TripRequest Schema 抽取对应字段。',
+        '## 当前日期参考',
+        `今天日期：${today}。如果用户未给出年份，请结合当前年份与上下文进行合理判断，不要编造明显不合逻辑的日期。`,
+        '## 表单枚举选项',
+        formatOptionGroup('transportation', TRIP_FORM_TRANSPORTATION_OPTIONS),
+        formatOptionGroup('accommodation', TRIP_FORM_ACCOMMODATION_OPTIONS),
+        formatOptionGroup('budget_level', TRIP_FORM_BUDGET_LEVEL_OPTIONS),
+        '- preferences 字段为自由文本标签数组，请保持原样或拆分用户描述中的兴趣关键词。',
         buildJsonOnlyRequirements('TripRequest'),
         '## TripRequest Schema',
         formatSchema(TRIP_REQUEST_SCHEMA)
@@ -225,11 +294,15 @@ function buildExtractionUserPrompt(prompt: string) {
 }
 
 function buildPlanSystemPrompt() {
+    const today = getCurrentIsoDate()
     return [
         '## 角色',
         '你是一名资深旅行行程规划师，擅长按照用户偏好输出结构化计划。',
         '## 任务目标',
         '根据给定的 TripRequest，制定覆盖每日行程、预算与天气信息的 TripPlan。',
+        '## 当前日期参考',
+        `今天日期：${today}。请确保规划的日期序列与 TripRequest 中的日期保持一致，不要产生明显早于今天的历史行程（除非用户明确要求回顾）。`,
+        '## 表单枚举选项对照',
         buildJsonOnlyRequirements('TripPlan'),
         '## TripPlan Schema',
         formatSchema(TRIP_PLAN_SCHEMA)
@@ -250,7 +323,8 @@ function buildPlanUserPrompt(request: TripRequest, hint?: string) {
         '## 规划提示',
         '- 行程需覆盖全部日期，保持日序连续。',
         '- attractions 至少提供 2 个条目，并包含分类、开放时间或时长估计。',
-        '- meals 字段需包含三餐或给出合理空缺说明。'
+        '- 为每个 day.description 提供 1-2 句话概述当天主题或亮点。',
+        '- meals 字段需包含三餐或给出合理空缺说明。',
     )
 
     return sections.join('\n\n')
