@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useAuth } from './AuthProvider'
+import ItineraryDetailDialog from './ItineraryDetailDialog'
 import type { TripPlan, TripPlanRecord, TripRequest } from '../types/trip'
 
 const SAMPLE_TRIP_PLAN: TripPlan = {
@@ -212,6 +213,9 @@ export default function ItinerariesClient() {
     const [editError, setEditError] = useState<string | null>(null)
     const [editSubmitting, setEditSubmitting] = useState(false)
 
+    const [detailPlan, setDetailPlan] = useState<TripPlanRecord | null>(null)
+    const [detailOpen, setDetailOpen] = useState(false)
+
     const loadPlans = useCallback(async () => {
         if (!user) return
         setIsLoading(true)
@@ -234,6 +238,17 @@ export default function ItinerariesClient() {
     useEffect(() => {
         void loadPlans()
     }, [loadPlans])
+
+    const activeDetailPlan = useMemo(() => {
+        if (!detailPlan) return null
+        return plans.find(item => item.id === detailPlan.id) ?? detailPlan
+    }, [detailPlan, plans])
+
+    useEffect(() => {
+        if (detailOpen || !detailPlan) return
+        const timer = window.setTimeout(() => setDetailPlan(null), 240)
+        return () => window.clearTimeout(timer)
+    }, [detailOpen, detailPlan])
 
     const handleCreate = useCallback(async () => {
         if (!user) {
@@ -329,6 +344,15 @@ export default function ItinerariesClient() {
         }
     }, [cancelEdit, editPlanJson, editRequestJson, editingId, user])
 
+    const openDetail = useCallback((plan: TripPlanRecord) => {
+        setDetailPlan(plan)
+        setDetailOpen(true)
+    }, [])
+
+    const closeDetail = useCallback(() => {
+        setDetailOpen(false)
+    }, [])
+
     const planSummary = useCallback((plan: TripPlanRecord) => {
         const dayCount = plan.days.length
         const attractions = plan.days.reduce((total, day) => total + day.attractions.length, 0)
@@ -349,8 +373,9 @@ export default function ItinerariesClient() {
     }, [isLoading, plans.length, user])
 
     return (
-        <div className="space-y-8">
-            <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <>
+            <div className="space-y-8">
+                <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                 <header className="mb-4">
                     <h2 className="text-xl font-semibold text-slate-900">我的行程</h2>
                     <p className="mt-1 text-sm text-slate-500">{headerDescription}</p>
@@ -382,6 +407,13 @@ export default function ItinerariesClient() {
                                                 最近更新：{new Date(plan.updated_at).toLocaleString('zh-CN', { hour12: false })}
                                             </span>
                                         ) : null}
+                                        <button
+                                            type="button"
+                                            onClick={() => openDetail(plan)}
+                                            className="rounded-full border border-emerald-500 px-3 py-1 text-xs font-medium text-emerald-600 transition hover:bg-emerald-50"
+                                        >
+                                            查看详情
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={() => beginEdit(plan)}
@@ -439,7 +471,7 @@ export default function ItinerariesClient() {
                 )}
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                 <header className="mb-4">
                     <h2 className="text-xl font-semibold text-slate-900">创建新 TripPlan</h2>
                     <p className="mt-1 text-sm text-slate-500">
@@ -494,7 +526,9 @@ export default function ItinerariesClient() {
                         </button>
                     </div>
                 </div>
-            </section>
-        </div>
+                </section>
+            </div>
+            <ItineraryDetailDialog open={detailOpen} plan={activeDetailPlan} onClose={closeDetail} />
+        </>
     )
 }
