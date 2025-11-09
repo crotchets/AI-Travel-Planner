@@ -25,6 +25,20 @@ interface BailianChatCompletionResponse {
 
 const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
+const DEFAULT_TIMEOUT_FALLBACK_MS = 120_000
+
+function parseTimeoutEnv() {
+    const raw =
+        process.env.BAILIAN_REQUEST_TIMEOUT_MS ?? process.env.BAILIAN_TIMEOUT_MS ?? process.env.BAILIAN_TIMEOUT ?? ''
+    const parsed = Number.parseInt(raw, 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed
+    }
+    return DEFAULT_TIMEOUT_FALLBACK_MS
+}
+
+const DEFAULT_TIMEOUT_MS = parseTimeoutEnv()
+
 type TripFormOption = {
     value: string
     label: string
@@ -382,7 +396,7 @@ export async function callBailianChatCompletion({
     messages,
     temperature,
     responseFormat,
-    timeoutMs = 60000
+    timeoutMs
 }: BailianChatCompletionOptions) {
     const apiKey = process.env.BAILIAN_API_KEY
     const baseUrl = process.env.BAILIAN_API_BASE_URL ?? DEFAULT_BASE_URL
@@ -391,7 +405,8 @@ export async function callBailianChatCompletion({
     ensureEnv('BAILIAN_API_KEY', apiKey)
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    const effectiveTimeout = timeoutMs ?? DEFAULT_TIMEOUT_MS
+    const timeout = setTimeout(() => controller.abort(), effectiveTimeout)
 
     try {
         const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -416,6 +431,11 @@ export async function callBailianChatCompletion({
 
         const data = (await response.json()) as BailianChatCompletionResponse
         return data
+    } catch (err) {
+        if ((err as any)?.name === 'AbortError' || controller.signal.aborted) {
+            throw new Error(`百炼接口调用超时（>${Math.round(effectiveTimeout / 1000)} 秒），请稍后重试或精简需求。`)
+        }
+        throw err
     } finally {
         clearTimeout(timeout)
     }

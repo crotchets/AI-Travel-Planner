@@ -72,7 +72,7 @@
 | US1 | 作为用户，我想用语音描述旅行需求，让系统自动生成行程 | P0 | 提交语音后显示完整行程表，含每日安排、预算概览 |
 | US2 | 作为用户，我想编辑行程中的某个景点，让 AI 重新调整当天安排 | P0 | 编辑后 10 秒内返回更新行程，并说明调整原因 |
 | US3 | 作为用户，我需要保存行程并在手机/电脑查看 | P0 | 登录同一账号可查看、编辑之前的行程 |
-| US4 | 作为用户，我想记录每天的花销 | P1 | 语音/手动输入金额即刻计入预算概览 |
+| US4 | 作为用户，我想记录每天的花销 | P1 | 支持语音/手动添加、编辑、删除费用，自动分类统计并可导出报告 |
 | US5 | 作为用户，我想通过地图查看景点位置与导航 | P1 | 行程页面嵌入地图标注景点，支持跳转导航 |
 | US6 | 作为用户，我想与同行者分享行程 | P2 | 可生成分享链接或导出 PDF |
 
@@ -84,14 +84,33 @@
 - 行程生成：调用 LLM，根据偏好推荐交通、住宿、日程景点、餐饮。
 - 可视化展示：按日分卡片，地图标点，支持查看详情（门票、开放时间、地址）。
 - 行程调整：支持拖拽、删除、替换景点；自动更新时间轴与预算。
+- 预算回溯：行程详情页汇总对应行程的费用统计，对比原始预算并给出超支/节省建议。提示可能的优化策略（例如减少购物或增加体验预算）。
 - 多方案对比（V2）：生成 2-3 个备选方案。
 
 #### 5.3.2 预算管理
 
+- 行程关联：预算中心以“选择行程”作为入口，所有费用记录、统计与导出均绑定具体行程，可快速切换行程查看各自的支出表现。
 - 预算拆分：根据输入预算自动分配到交通/住宿/餐饮/门票等。
 - 预算提醒：超过预算项时高亮提示。
-- 费用录入：语音识别金额和类别；支持手动输入。
-- 数据展示：每日支出、类别饼图、预算差额。
+- 费用记录：
+  - 支持添加、编辑、删除单条费用，必填字段包含金额、类别、日期、支付方式。
+  - 默认支持 7 种费用类别（交通、住宿、餐饮、门票、购物、娱乐、其他），需允许后续扩展。
+  - 默认支持 5 种支付方式（现金、信用卡、借记卡、移动支付、其他），界面需以枚举下拉呈现。
+  - 每条费用允许填写备注，备注支持 Markdown 简易格式（加粗、斜体、列表）。
+  - 费用日期采用日期选择器，默认定位到当前行程日期范围。
+- 费用统计分析：
+  - 自动计算总支出并与行程预算对比，显示差额与完成度百分比。
+  - 按类别统计金额、笔数与预算占比，支持导出表格。
+  - 按日期聚合支出，生成每日趋势数据，支持选择时间粒度（日/周）。
+  - 可视化图表：类别饼图、每日支出柱状图（或折线图），支持切换显示指标。
+- 数据导出：
+  - 提供 Excel（SheetJS 实现）、CSV 两种原始数据导出格式，Excel 需包含公式与多 sheet（原始数据、统计分析）。
+  - 导出费用报告（PDF/HTML），内容包含统计摘要、图表截图、预算对比说明。
+  - 导出操作需支持筛选条件（日期范围、类别、支付方式）。
+- 语音输入：
+  - 集成讯飞语音识别 API，支持实时语音转文字，至少提供麦克风按钮/快捷键触发。
+  - AI 解析语音内容（金额、类别、日期、描述、支付方式）自动填充费用表单，可在提交前手动校验。
+  - 提供语音录入失败兜底流程（回退文字编辑、重新识别）。
 
 #### 5.3.3 用户管理与数据同步
 
@@ -156,6 +175,8 @@
 - **状态管理**：React Query（数据请求）、Zustand（全局 UI 状态）。
 - **语音交互**：浏览器端调用科大讯飞 Web API（或备选 Whisper API）。
 - **地图服务**：高德地图 JS API，封装地图组件与标注层。
+- **图表可视化**：优先选用 Recharts 或 ECharts for React，支持饼图、柱状/折线图动态刷新。
+- **文件导出**：引入 SheetJS 处理 Excel，多工作表与公式生成；CSV 导出使用浏览器 Blob。
 
 ### 7.2 后端
 
@@ -278,6 +299,33 @@ BudgetCategory 字段说明：
 | amount | number | ✅ | 分类金额。|
 | currency | string | ⭕️ | 分类货币代码，未提供时继承总额货币。|
 
+#### ExpenseRecord（预算中心费用记录）
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| id | string | ✅ | 费用记录主键（UUID）。|
+| trip_id | string | ✅ | 关联的行程 ID。|
+| amount | number | ✅ | 费用金额，默认以行程货币计价。|
+| currency | string | ⭕️ | 费用货币代码，缺省时沿用预算货币。|
+| category | `"transport" \| "accommodation" \| "meal" \| "ticket" \| "shopping" \| "entertainment" \| "other"` | ✅ | 费用类别。|
+| payment_method | `"cash" \| "credit_card" \| "debit_card" \| "mobile_payment" \| "other"` | ✅ | 支付方式。|
+| spent_at | string | ✅ | 费用日期（ISO8601）。|
+| description | string | ⭕️ | 费用备注，支持 Markdown。|
+| created_at | string | ✅ | 创建时间戳。|
+| updated_at | string | ⭕️ | 最近更新时间戳。|
+| source | `"manual" \| "voice"` | ⭕️ | 录入来源，便于统计语音使用率。|
+
+#### ExpenseStats（预算统计返回结构）
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| trip_id | string | 当前统计对应的行程 ID。|
+| total_spent | number | 行程累计支出。|
+| budget_total | number \| null | 行程原始预算，来源于 TripPlan.budget.total。|
+| budget_delta | number \| null | 预算差额（预算-支出）。|
+| by_category | `{ category: ExpenseCategory, amount: number, count: number, ratio: number }[]` | 分类统计。|
+| by_date | `{ date: string, amount: number }[]` | 日期维度统计。|
+
 #### TripPlanRecord（返回给前端的保存结果）
 
 | 字段 | 类型 | 说明 |
@@ -337,6 +385,24 @@ BudgetCategory 字段说明：
 | updated_at | timestamptz | 可由触发器更新。|
 
 后续若增加预算或偏好表，可在此节补充扩展表结构。
+
+预算分析增强需新增 `expense_record` 表：
+
+| 字段 | 类型（建议） | 说明 |
+| --- | --- | --- |
+| id | uuid | 主键。|
+| trip_id | uuid | 对应 `trip_plan.id`，外键约束。|
+| user_id | uuid | 冗余字段，便于 RLS 校验。|
+| amount | numeric(12,2) | 费用金额。|
+| currency | text | ISO 货币代码，缺省继承行程币种。|
+| category | text | 费用类别枚举值，建议建 `check` 约束。|
+| payment_method | text | 支付方式枚举值。|
+| spent_at | date | 发生日期。|
+| description | text | 备注，支持 Markdown。|
+| source | text | 录入渠道（manual/voice）。|
+| metadata | jsonb | 语音识别原始结果等附加信息。|
+| created_at | timestamptz | 默认 `now()`。|
+| updated_at | timestamptz | 更新时间。|
 
 ### 8.4 后端 API 接口契约
 
@@ -428,6 +494,15 @@ BudgetCategory 字段说明：
 
 - **错误响应**：`{ "error": string }`
 - **鉴权**：无需登录，但需在服务端配置讯飞凭证。
+
+#### 预算中心 API（规划中）
+
+- **GET `/api/expenses`**：查询指定行程的费用记录，支持按日期、类别、支付方式筛选，返回 `{ "data": ExpenseRecord[] }`。
+- **POST `/api/expenses`**：创建费用记录，输入 `ExpenseRecord` 除 ID/时间戳外字段，返回 `{ "data": ExpenseRecord }`。
+- **PUT `/api/expenses/{id}`**：更新指定费用记录。
+- **DELETE `/api/expenses/{id}`**：删除费用记录，成功返回 204。
+- **GET `/api/expenses/stats`**：返回 `{ total, budgetDelta, byCategory: { amount, count, ratio }[], byDate: { date, amount }[] }`。
+- **POST `/api/expenses/export`**：接受导出格式（excel/csv/report）与筛选条件，返回生成任务 ID 或直接返回文件流；Excel 导出由 SheetJS 生成多 Sheet 数据。
 
 ### 8.5 前端表单与录音载荷
 
