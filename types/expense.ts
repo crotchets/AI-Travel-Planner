@@ -76,3 +76,22 @@ export interface ExpenseStatsView {
     byCategory: ExpenseStatsCategory[]
     byDate: ExpenseStatsByDate[]
 }
+
+export type ExpenseAnalysisBudgetStatus = 'over_budget' | 'under_budget' | 'on_track'
+
+export interface ExpenseAnalysisObservation {
+    title: string
+    detail: string
+}
+
+export interface ExpenseAnalysisResponse {
+    tripId: string
+    generatedAt: string
+    summary: string
+    budgetStatus: ExpenseAnalysisBudgetStatus
+    spendingOverview: string[]
+    keyObservations: ExpenseAnalysisObservation[]
+    recommendations: string[]
+    savingTips: string[]
+    riskWarnings: string[]
+}

@@ -45,5 +45,6 @@ BAILIAN_REQUEST_TIMEOUT_MS=120000
 - `app/api/transcribe/iflytek/route.ts` 基于 websocket 调用讯飞实时听写（IAT）服务，按帧推送音频并聚合返回的实时转写结果。
 - `app/api/trip-request/extract` & `app/api/planner/generate` 封装百炼 DashScope 兼容接口，实现 TripRequest 提取与 TripPlan 生成及持久化。
 - `components/MapPreview.tsx` 默认加载高德地图示意图，配置 `NEXT_PUBLIC_AMAP_API_KEY`（以及已启用安全校验时的 `NEXT_PUBLIC_AMAP_SECURITY_CODE`）后即可展示真实地图数据。
-- `components/BudgetClient.tsx` 绑定行程进行支出记录，内置语音录入、按类别/支付方式筛选、Recharts 图表与 Excel/CSV/HTML 导出，消费数据通过 `/api/expenses` 系列路由读取 Supabase 预算表。
+- `components/BudgetClient.tsx` 绑定行程进行支出记录，内置语音录入、按类别/支付方式筛选、Recharts 图表与 Excel/CSV/HTML 导出，并可一键调用 AI 生成预算分析建议；消费数据通过 `/api/expenses` 系列路由读取 Supabase 预算表。
+- `/app/api/expenses/analysis` 利用百炼大模型对预算执行情况先输出开销现状总结，再给出整体结论、行动建议、节省技巧与风险提醒。
 - 新增 `/app/api/expenses`（列表/创建）、`/app/api/expenses/[id]`（更新/删除）、`/app/api/expenses/stats`（统计）路由，提供按行程维度的预算 CRUD 与统计聚合能力。

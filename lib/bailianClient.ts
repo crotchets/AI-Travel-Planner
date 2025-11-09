@@ -233,7 +233,7 @@ const TRIP_PLAN_SCHEMA = {
                         required: ['label', 'amount'],
                         additionalProperties: false,
                         properties: {
-                            label: { type: 'string', description: '预算分项名称，例如 “交通”。' },
+                            label: { type: 'string', description: '预算分项名称，从' },
                             amount: { type: 'number', description: '该分项预计费用金额。' },
                             currency: { type: 'string', description: '该分项使用的货币单位，默认沿用总预算货币。' }
                         }

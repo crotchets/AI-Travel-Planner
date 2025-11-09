@@ -4,8 +4,9 @@ import { NextResponse } from 'next/server'
 
 import { EXPENSE_TABLE_NAME, mapExpenseRowToRecord, type ExpenseRow } from '../../../../lib/expenseMapper'
 import { TRIP_TABLE_NAME } from '../../../../lib/tripMapper'
-import type { ExpenseRecord, ExpenseStatsResponse } from '../../../../types/expense'
+import type { ExpenseRecord } from '../../../../types/expense'
 import { applyExpenseFilters, normalizeString } from '../helpers'
+import { summarizeExpenseStats } from '../../../../lib/expenseStats'
 
 function parseNumeric(value: unknown): number | null {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -18,39 +19,6 @@ function parseNumeric(value: unknown): number | null {
         }
     }
     return null
-}
-
-function buildCategoryStats(records: ExpenseRecord[], total: number) {
-    const map = new Map<string, { amount: number; count: number }>()
-    records.forEach(record => {
-        const key = record.category
-        const current = map.get(key) ?? { amount: 0, count: 0 }
-        current.amount += record.amount
-        current.count += 1
-        map.set(key, current)
-    })
-
-    return Array.from(map.entries())
-        .map(([category, value]) => ({
-            category: category as any,
-            amount: Number(value.amount.toFixed(2)),
-            count: value.count,
-            ratio: total > 0 ? value.amount / total : 0
-        }))
-        .sort((a, b) => b.amount - a.amount)
-}
-
-function buildDateStats(records: ExpenseRecord[]) {
-    const map = new Map<string, number>()
-    records.forEach(record => {
-        const dateKey = record.spent_at
-        const current = map.get(dateKey) ?? 0
-        map.set(dateKey, current + record.amount)
-    })
-
-    return Array.from(map.entries())
-        .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
-        .map(([date, amount]) => ({ date, amount: Number(amount.toFixed(2)) }))
 }
 
 export async function GET(request: Request) {
@@ -87,7 +55,6 @@ export async function GET(request: Request) {
     }
 
     const expenseRecords = (expenseRows ?? []).map(row => mapExpenseRowToRecord(row as ExpenseRow))
-    const totalSpent = expenseRecords.reduce((total, record) => total + record.amount, 0)
 
     let budgetTotal: number | null = null
 
@@ -106,14 +73,7 @@ export async function GET(request: Request) {
         }
     }
 
-    const response: ExpenseStatsResponse = {
-        trip_id: tripId,
-        total_spent: Number(totalSpent.toFixed(2)),
-        budget_total: budgetTotal,
-        budget_delta: budgetTotal !== null ? Number((budgetTotal - totalSpent).toFixed(2)) : null,
-        by_category: buildCategoryStats(expenseRecords, totalSpent),
-        by_date: buildDateStats(expenseRecords)
-    }
+    const summary = summarizeExpenseStats(tripId, expenseRecords, budgetTotal)
 
-    return NextResponse.json({ data: response })
+    return NextResponse.json({ data: summary.response })
 }
