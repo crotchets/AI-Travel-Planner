@@ -12,6 +12,16 @@ interface ApiResponse<T> {
     error?: string
 }
 
+interface PlanFilters {
+    search: string
+    startDate: string
+    endDate: string
+}
+
+type SortOption = 'created_desc' | 'created_asc' | 'start_date_desc' | 'start_date_asc'
+
+const DEFAULT_SORT_OPTION: SortOption = 'created_desc'
+
 export default function ItinerariesClient() {
     const { user } = useAuth()
     const router = useRouter()
@@ -19,6 +29,9 @@ export default function ItinerariesClient() {
     const [plans, setPlans] = useState<TripPlanRecord[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    const [filters, setFilters] = useState<PlanFilters>({ search: '', startDate: '', endDate: '' })
+    const [sortOption, setSortOption] = useState<SortOption>(DEFAULT_SORT_OPTION)
 
     const [editingId, setEditingId] = useState<string | null>(null)
     const [editPlanJson, setEditPlanJson] = useState('')
@@ -31,6 +44,11 @@ export default function ItinerariesClient() {
     const [deletingId, setDeletingId] = useState<string | null>(null)
 
     const planIdQuery = searchParams?.get('planId') ?? null
+
+    const resetFilters = useCallback(() => {
+        setFilters({ search: '', startDate: '', endDate: '' })
+        setSortOption(DEFAULT_SORT_OPTION)
+    }, [setFilters, setSortOption])
 
     const updatePlanIdQuery = useCallback(
         (planId: string | null, options: { replace?: boolean } = {}) => {
@@ -93,6 +111,75 @@ export default function ItinerariesClient() {
     useEffect(() => {
         void loadPlans()
     }, [loadPlans])
+
+    const visiblePlans = useMemo(() => {
+        if (!plans.length) {
+            return []
+        }
+
+        const searchValue = filters.search.trim().toLowerCase()
+        const parseDate = (value: string | undefined | null) => {
+            if (!value) return null
+            const timestamp = Date.parse(value)
+            return Number.isNaN(timestamp) ? null : timestamp
+        }
+
+        const startTimestamp = filters.startDate ? parseDate(filters.startDate) : null
+        const endTimestamp = filters.endDate ? parseDate(filters.endDate) : null
+
+        const filtered = plans.filter(plan => {
+            if (searchValue) {
+                const haystacks = [plan.city, plan.request?.city, plan.overall_suggestions]
+                    .filter(Boolean)
+                    .map(text => text!.toLowerCase())
+                const matchesSearch = haystacks.some(text => text.includes(searchValue))
+                if (!matchesSearch) return false
+            }
+
+            const planStart = parseDate(plan.start_date)
+            if (startTimestamp !== null && (planStart === null || planStart < startTimestamp)) {
+                return false
+            }
+
+            const planEnd = parseDate(plan.end_date)
+            if (endTimestamp !== null && (planEnd === null || planEnd > endTimestamp)) {
+                return false
+            }
+
+            return true
+        })
+
+        const toTime = (value: string | undefined | null) => {
+            if (!value) return 0
+            const timestamp = Date.parse(value)
+            return Number.isNaN(timestamp) ? 0 : timestamp
+        }
+
+        const sorted = [...filtered].sort((a, b) => {
+            switch (sortOption) {
+                case 'created_asc':
+                    return toTime(a.created_at) - toTime(b.created_at)
+                case 'start_date_desc': {
+                    const diff = toTime(b.start_date) - toTime(a.start_date)
+                    return diff !== 0 ? diff : toTime(b.end_date) - toTime(a.end_date)
+                }
+                case 'start_date_asc': {
+                    const diff = toTime(a.start_date) - toTime(b.start_date)
+                    return diff !== 0 ? diff : toTime(a.end_date) - toTime(b.end_date)
+                }
+                case 'created_desc':
+                default:
+                    return toTime(b.created_at) - toTime(a.created_at)
+            }
+        })
+
+        return sorted
+    }, [filters, plans, sortOption])
+
+    const hasActiveFilters = useMemo(() => {
+        const searchActive = filters.search.trim().length > 0
+        return Boolean(searchActive || filters.startDate || filters.endDate || sortOption !== DEFAULT_SORT_OPTION)
+    }, [filters, sortOption])
 
     const activeDetailPlan = useMemo(() => {
         if (!detailPlan) return null
@@ -233,8 +320,14 @@ export default function ItinerariesClient() {
         if (plans.length === 0) {
             return '暂无行程，请前往仪表盘使用 AI 表单创建新的 TripPlan。'
         }
+        if (visiblePlans.length === 0) {
+            return `共保存 ${plans.length} 条行程，当前筛选条件下没有匹配结果。`
+        }
+        if (hasActiveFilters) {
+            return `共保存 ${plans.length} 条行程，当前显示 ${visiblePlans.length} 条，可继续点击卡片查看详情或编辑。`
+        }
         return `已保存 ${plans.length} 条行程，可点击卡片查看详情或编辑。`
-    }, [isLoading, plans.length, user])
+    }, [hasActiveFilters, isLoading, plans.length, user, visiblePlans.length])
 
     return (
         <>
@@ -246,6 +339,79 @@ export default function ItinerariesClient() {
                     </header>
 
                     {error ? <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p> : null}
+
+                    <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                        <label className="flex flex-col text-xs font-semibold text-slate-600">
+                            <span className="mb-1 uppercase tracking-wide text-slate-500">目的地 / 关键词</span>
+                            <input
+                                type="text"
+                                value={filters.search}
+                                onChange={event =>
+                                    setFilters(prev => ({
+                                        ...prev,
+                                        search: event.target.value
+                                    }))
+                                }
+                                placeholder="输入城市或摘要"
+                                className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-normal text-slate-700 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                disabled={isLoading}
+                            />
+                        </label>
+                        <label className="flex flex-col text-xs font-semibold text-slate-600">
+                            <span className="mb-1 uppercase tracking-wide text-slate-500">开始日期 ≥</span>
+                            <input
+                                type="date"
+                                value={filters.startDate}
+                                onChange={event =>
+                                    setFilters(prev => ({
+                                        ...prev,
+                                        startDate: event.target.value
+                                    }))
+                                }
+                                className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-normal text-slate-700 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                disabled={isLoading}
+                            />
+                        </label>
+                        <label className="flex flex-col text-xs font-semibold text-slate-600">
+                            <span className="mb-1 uppercase tracking-wide text-slate-500">结束日期 ≤</span>
+                            <input
+                                type="date"
+                                value={filters.endDate}
+                                onChange={event =>
+                                    setFilters(prev => ({
+                                        ...prev,
+                                        endDate: event.target.value
+                                    }))
+                                }
+                                className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-normal text-slate-700 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                disabled={isLoading}
+                            />
+                        </label>
+                        <label className="flex flex-col text-xs font-semibold text-slate-600">
+                            <span className="mb-1 uppercase tracking-wide text-slate-500">排序方式</span>
+                            <select
+                                value={sortOption}
+                                onChange={event => setSortOption(event.target.value as SortOption)}
+                                className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-normal text-slate-700 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                disabled={isLoading}
+                            >
+                                <option value="created_desc">按创建时间（最新在前）</option>
+                                <option value="created_asc">按创建时间（最早在前）</option>
+                                <option value="start_date_desc">按出行日期（最晚出发在前）</option>
+                                <option value="start_date_asc">按出行日期（最早出发在前）</option>
+                            </select>
+                        </label>
+                        <div className="flex items-end">
+                            <button
+                                type="button"
+                                onClick={resetFilters}
+                                disabled={!hasActiveFilters}
+                                className="h-10 w-full rounded-full border border-slate-300 px-4 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                            >
+                                重置筛选
+                            </button>
+                        </div>
+                    </div>
 
                     {isLoading ? (
                         <p className="text-sm text-slate-500">正在加载行程列表…</p>
@@ -259,9 +425,22 @@ export default function ItinerariesClient() {
                                 前往仪表盘
                             </a>
                         </div>
+                    ) : visiblePlans.length === 0 ? (
+                        <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm text-slate-500">
+                            <p>当前筛选条件下没有匹配的行程，可以调整筛选项或点击上方“重置筛选”。</p>
+                            {hasActiveFilters ? (
+                                <button
+                                    type="button"
+                                    onClick={resetFilters}
+                                    className="rounded-full border border-slate-300 px-4 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
+                                >
+                                    清除筛选
+                                </button>
+                            ) : null}
+                        </div>
                     ) : (
                         <ul className="space-y-4">
-                            {plans.map(plan => (
+                            {visiblePlans.map(plan => (
                                 <li
                                     key={plan.id}
                                     id={plan.id}

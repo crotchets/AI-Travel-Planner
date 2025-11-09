@@ -48,3 +48,4 @@ BAILIAN_REQUEST_TIMEOUT_MS=120000
 - `components/BudgetClient.tsx` 绑定行程进行支出记录，内置语音录入、按类别/支付方式筛选、Recharts 图表与 Excel/CSV/HTML 导出，并可一键调用 AI 生成预算分析建议；消费数据通过 `/api/expenses` 系列路由读取 Supabase 预算表。
 - `/app/api/expenses/analysis` 利用百炼大模型对预算执行情况先输出开销现状总结，再给出整体结论、行动建议、节省技巧与风险提醒。
 - 新增 `/app/api/expenses`（列表/创建）、`/app/api/expenses/[id]`（更新/删除）、`/app/api/expenses/stats`（统计）路由，提供按行程维度的预算 CRUD 与统计聚合能力。
+- `components/ItinerariesClient.tsx` 在行程页支持按目的地关键词与日期区间筛选，并可按创建时间或出行时间排序列表。
