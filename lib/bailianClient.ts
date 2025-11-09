@@ -137,7 +137,7 @@ const TRIP_PLAN_SCHEMA = {
                     hotel: {
                         type: 'object',
                         additionalProperties: false,
-                        description: '当天推荐入住的酒店信息，可省略。',
+                        description: '当天推荐入住的酒店信息。',
                         properties: {
                             name: { type: 'string', description: '酒店名称。' },
                             address: { type: 'string', description: '酒店地址。' },
@@ -220,7 +220,7 @@ const TRIP_PLAN_SCHEMA = {
         budget: {
             type: 'object',
             additionalProperties: false,
-            description: '行程预算信息，可在用户要求时给出总预算与分项建议。',
+            description: '行程预算信息，可在用户要求时给出总预算与分项建议。如果用户未提及预算，自行推测预算水平并提供合理建议。',
             properties: {
                 total: { type: 'number', description: '预计总预算金额。' },
                 currency: { type: 'string', description: '预算使用的货币单位，例如 “CNY”。' },

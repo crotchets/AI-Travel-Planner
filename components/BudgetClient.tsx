@@ -647,35 +647,34 @@ export default function BudgetClient() {
             summaryLines.push('<h2>按类别统计</h2>')
             summaryLines.push(
                 '<ul>' +
-                    stats.byCategory
-                        .map(
-                            item =>
-                                `<li>${CATEGORY_LOOKUP[item.category]}：${formatAmount(item.amount)} · ${item.count} 笔 · ${(item.ratio * 100).toFixed(1)}%</li>`
-                        )
-                        .join('') +
-                    '</ul>'
+                stats.byCategory
+                    .map(
+                        item =>
+                            `<li>${CATEGORY_LOOKUP[item.category]}：${formatAmount(item.amount)} · ${item.count} 笔 · ${(item.ratio * 100).toFixed(1)}%</li>`
+                    )
+                    .join('') +
+                '</ul>'
             )
             summaryLines.push('<h2>按日期统计</h2>')
             summaryLines.push(
                 '<ul>' +
-                    stats.byDate
-                        .map(item => `<li>${item.date}：${formatAmount(item.amount)}</li>`)
-                        .join('') +
-                    '</ul>'
+                stats.byDate
+                    .map(item => `<li>${item.date}：${formatAmount(item.amount)}</li>`)
+                    .join('') +
+                '</ul>'
             )
         }
         summaryLines.push('<h2>费用明细</h2>')
         summaryLines.push(
             '<ul>' +
-                expenses
-                    .map(
-                        item =>
-                            `<li>${item.spent_at} · ${formatAmount(item.amount, item.currency)} · ${CATEGORY_LOOKUP[item.category]} · ${
-                                PAYMENT_LOOKUP[item.payment_method]
-                            }${item.description ? ` · ${item.description}` : ''}</li>`
-                    )
-                    .join('') +
-                '</ul>'
+            expenses
+                .map(
+                    item =>
+                        `<li>${item.spent_at} · ${formatAmount(item.amount, item.currency)} · ${CATEGORY_LOOKUP[item.category]} · ${PAYMENT_LOOKUP[item.payment_method]
+                        }${item.description ? ` · ${item.description}` : ''}</li>`
+                )
+                .join('') +
+            '</ul>'
         )
         const fileName = `${selectedTrip.city}_费用报告_${format(new Date(), 'yyyyMMdd_HHmm')}.html`
         downloadBlob(summaryLines.join(''), fileName, 'text/html;charset=utf-8')
@@ -886,11 +885,10 @@ export default function BudgetClient() {
                                         <button
                                             type="button"
                                             onClick={() => (voiceStatus === 'recording' ? handleVoiceStop() : handleVoiceStart())}
-                                            className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium shadow transition ${
-                                                voiceStatus === 'recording'
+                                            className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium shadow transition ${voiceStatus === 'recording'
                                                     ? 'border border-red-500 bg-red-50 text-red-600'
                                                     : 'border border-emerald-500 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                                            }`}
+                                                }`}
                                         >
                                             {voiceStatus === 'recording' ? '停止语音录入' : '语音输入'}
                                         </button>
