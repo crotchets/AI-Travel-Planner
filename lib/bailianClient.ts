@@ -114,7 +114,7 @@ const TRIP_PLAN_SCHEMA = {
                     description: { type: 'string', description: '当天行程的概述或主题描述。' },
                     transportation: {
                         type: 'string',
-                        description: '当天主要的交通方式或移动安排，可引用表单枚举值或补充说明。'
+                        description: '当天主要的交通方式或移动安排，如公共交通、自驾等。'
                     },
                     accommodation: {
                         type: 'string',
