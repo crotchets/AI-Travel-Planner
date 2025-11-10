@@ -29,7 +29,10 @@ const DEFAULT_TIMEOUT_FALLBACK_MS = 120_000
 
 function parseTimeoutEnv() {
     const raw =
-        process.env.BAILIAN_REQUEST_TIMEOUT_MS ?? process.env.BAILIAN_TIMEOUT_MS ?? process.env.BAILIAN_TIMEOUT ?? ''
+        process.env.NEXT_PUBLIC_BAILIAN_REQUEST_TIMEOUT_MS ??
+        process.env.NEXT_PUBLIC_BAILIAN_TIMEOUT_MS ??
+        process.env.NEXT_PUBLIC_BAILIAN_TIMEOUT ??
+        ''
     const parsed = Number.parseInt(raw, 10)
     if (Number.isFinite(parsed) && parsed > 0) {
         return parsed
@@ -398,11 +401,11 @@ export async function callBailianChatCompletion({
     responseFormat,
     timeoutMs
 }: BailianChatCompletionOptions) {
-    const apiKey = process.env.BAILIAN_API_KEY
-    const baseUrl = process.env.BAILIAN_API_BASE_URL ?? DEFAULT_BASE_URL
-    const defaultModel = process.env.BAILIAN_DEFAULT_MODEL ?? 'qwen-plus'
+    const apiKey = process.env.NEXT_PUBLIC_BAILIAN_API_KEY
+    const baseUrl = process.env.NEXT_PUBLIC_BAILIAN_API_BASE_URL ?? DEFAULT_BASE_URL
+    const defaultModel = process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL ?? 'qwen-plus'
 
-    ensureEnv('BAILIAN_API_KEY', apiKey)
+    ensureEnv('NEXT_PUBLIC_BAILIAN_API_KEY', apiKey)
 
     const controller = new AbortController()
     const effectiveTimeout = timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -442,7 +445,7 @@ export async function callBailianChatCompletion({
 }
 
 export async function extractTripRequestFromPrompt(prompt: string): Promise<TripRequest> {
-    const model = process.env.BAILIAN_TRIP_REQUEST_MODEL ?? process.env.BAILIAN_DEFAULT_MODEL
+    const model = process.env.NEXT_PUBLIC_BAILIAN_TRIP_REQUEST_MODEL ?? process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL
     const response = await callBailianChatCompletion({
         model,
         messages: [
@@ -494,7 +497,7 @@ export async function generateTripPlanFromRequest(
     request: TripRequest,
     options: { userPrompt?: string; temperature?: number } = {}
 ): Promise<TripPlan> {
-    const model = process.env.BAILIAN_TRIP_PLAN_MODEL ?? process.env.BAILIAN_DEFAULT_MODEL
+    const model = process.env.NEXT_PUBLIC_BAILIAN_TRIP_PLAN_MODEL ?? process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL
 
     const response = await callBailianChatCompletion({
         model,

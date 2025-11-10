@@ -5,24 +5,24 @@ import { NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_WS_URL = process.env.IFLYTEK_IAT_URL ?? 'wss://iat-api.xfyun.cn/v2/iat'
+const DEFAULT_WS_URL = process.env.NEXT_PUBLIC_IFLYTEK_IAT_URL ?? 'wss://iat-api.xfyun.cn/v2/iat'
 const parsedWsUrl = new URL(DEFAULT_WS_URL)
 const WS_HOST = parsedWsUrl.host
 const WS_PATH = parsedWsUrl.pathname || '/v2/iat'
 
-const APP_ID = (process.env.IFLYTEK_IAT_APP_ID ?? process.env.IFLYTEK_APP_ID)?.trim()
-const API_KEY = (process.env.IFLYTEK_IAT_API_KEY ?? process.env.IFLYTEK_API_KEY)?.trim()
-const API_SECRET = (process.env.IFLYTEK_IAT_API_SECRET ?? process.env.IFLYTEK_API_SECRET ?? process.env.IFLYTEK_SECRET_KEY)?.trim()
+const APP_ID = process.env.NEXT_PUBLIC_IFLYTEK_IAT_APP_ID?.trim()
+const API_KEY = process.env.NEXT_PUBLIC_IFLYTEK_IAT_API_KEY?.trim()
+const API_SECRET = process.env.NEXT_PUBLIC_IFLYTEK_IAT_API_SECRET?.trim()
 
-const DEFAULT_SAMPLE_RATE = Number(process.env.IFLYTEK_IAT_SAMPLE_RATE ?? 16000)
-const FRAME_CHUNK_BYTES = Number(process.env.IFLYTEK_IAT_CHUNK_BYTES ?? 1280)
-const MAX_AUDIO_BYTES = Number(process.env.IFLYTEK_IAT_MAX_BYTES ?? 10 * 1024 * 1024)
+const DEFAULT_SAMPLE_RATE = Number(process.env.NEXT_PUBLIC_IFLYTEK_IAT_SAMPLE_RATE ?? 16000)
+const FRAME_CHUNK_BYTES = Number(process.env.NEXT_PUBLIC_IFLYTEK_IAT_CHUNK_BYTES ?? 1280)
+const MAX_AUDIO_BYTES = Number(process.env.NEXT_PUBLIC_IFLYTEK_IAT_MAX_BYTES ?? 10 * 1024 * 1024)
 
 const DEFAULT_BUSINESS: Record<string, string> = {
-    language: process.env.IFLYTEK_IAT_LANGUAGE ?? 'zh_cn',
-    domain: process.env.IFLYTEK_IAT_DOMAIN ?? 'iat',
-    accent: process.env.IFLYTEK_IAT_ACCENT ?? 'mandarin',
-    dwa: process.env.IFLYTEK_IAT_DWA ?? 'wpgs'
+    language: process.env.NEXT_PUBLIC_IFLYTEK_IAT_LANGUAGE ?? 'zh_cn',
+    domain: process.env.NEXT_PUBLIC_IFLYTEK_IAT_DOMAIN ?? 'iat',
+    accent: process.env.NEXT_PUBLIC_IFLYTEK_IAT_ACCENT ?? 'mandarin',
+    dwa: process.env.NEXT_PUBLIC_IFLYTEK_IAT_DWA ?? 'wpgs'
 }
 
 const FRAME_STATUS = {
@@ -60,7 +60,9 @@ interface IatResponsePayload {
 
 function ensureCredentials() {
     if (!APP_ID || !API_KEY || !API_SECRET) {
-        throw new Error('未配置讯飞语音听写凭证，请在环境变量中设置 IFLYTEK_IAT_APP_ID、IFLYTEK_IAT_API_KEY、IFLYTEK_IAT_API_SECRET。')
+        throw new Error(
+            '未配置讯飞语音听写凭证，请在环境变量中设置 NEXT_PUBLIC_IFLYTEK_IAT_APP_ID、NEXT_PUBLIC_IFLYTEK_IAT_API_KEY、NEXT_PUBLIC_IFLYTEK_IAT_API_SECRET。'
+        )
     }
 }
 
