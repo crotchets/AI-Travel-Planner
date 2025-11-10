@@ -59,9 +59,8 @@ USER nextjs
 EXPOSE 3000
 
 ENV PORT=3000
-COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+# COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 # server.js is created by next build from the standalone output
 # https://nextjs.org/docs/pages/api-reference/config/next-config-js/output
 ENV HOSTNAME="0.0.0.0"
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
