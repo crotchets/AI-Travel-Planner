@@ -277,11 +277,6 @@ export default function ItineraryInputForm({ onPlanCreated }: DashboardItinerary
 
     const remaining = MAX_CHARS - prompt.length
     const partialRequest = useMemo(() => buildTripRequestPayload(requestForm, { allowPartial: true }), [requestForm])
-    const requestPreview = useMemo(() => {
-        return partialRequest
-            ? JSON.stringify(partialRequest, null, 2)
-            : '// 完善目的地城市与出行日期后可生成 TripRequest 预览'
-    }, [partialRequest])
 
     const canExtract = prompt.trim().length > 0 && !isExtracting && !isUploadingAudio
     const canGenerate = Boolean(partialRequest) && !isGenerating && !isUploadingAudio
@@ -697,160 +692,145 @@ export default function ItineraryInputForm({ onPlanCreated }: DashboardItinerary
                     </button>
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-[1.15fr,1fr]">
-                    <div className="space-y-4">
-                        <div>
-                            <h3 className="text-sm font-semibold text-slate-900">旅行需求</h3>
-                            <p className="mt-1 text-xs text-slate-500">确认或修改自动填充的字段，必要时手动补全信息。</p>
-                        </div>
-
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    目的地城市 *
-                                </span>
-                                <input
-                                    type="text"
-                                    value={requestForm.city}
-                                    onChange={event => updateRequestField('city', event.target.value)}
-                                    placeholder="例如：杭州"
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                />
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    行程开始日期 *
-                                </span>
-                                <input
-                                    type="date"
-                                    value={requestForm.start_date}
-                                    onChange={event => updateRequestField('start_date', event.target.value)}
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                />
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    行程结束日期 *
-                                </span>
-                                <input
-                                    type="date"
-                                    value={requestForm.end_date}
-                                    onChange={event => updateRequestField('end_date', event.target.value)}
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                />
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    行程天数（可选）
-                                </span>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    value={requestForm.travel_days}
-                                    onChange={event => updateRequestField('travel_days', event.target.value)}
-                                    placeholder="例如：5"
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                />
-                            </label>
-                        </div>
-
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    交通偏好（可选）
-                                </span>
-                                <select
-                                    value={requestForm.transportation}
-                                    onChange={event => updateRequestField('transportation', event.target.value)}
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                >
-                                    <option value="">请选择交通偏好</option>
-                                    {TRIP_FORM_TRANSPORTATION_OPTIONS.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    住宿偏好（可选）
-                                </span>
-                                <select
-                                    value={requestForm.accommodation}
-                                    onChange={event => updateRequestField('accommodation', event.target.value)}
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                >
-                                    <option value="">请选择住宿偏好</option>
-                                    {TRIP_FORM_ACCOMMODATION_OPTIONS.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    预算等级（可选）
-                                </span>
-                                <select
-                                    value={requestForm.budget_level}
-                                    onChange={event => updateRequestField('budget_level', event.target.value)}
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                >
-                                    <option value="">请选择预算等级</option>
-                                    {TRIP_FORM_BUDGET_LEVEL_OPTIONS.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                        </div>
-
-                        <div>
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    兴趣偏好（可选）
-                                </span>
-                                <textarea
-                                    value={requestForm.preferences}
-                                    onChange={event => updateRequestField('preferences', event.target.value)}
-                                    rows={3}
-                                    placeholder="例如：美食、自然、摄影"
-                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                />
-                            </label>
-                            <p className="mt-1 text-xs text-slate-400">可使用逗号、分号或换行分隔多个偏好。</p>
-                        </div>
-
-                        <div>
-                            <label className="flex flex-col gap-1 text-sm text-slate-600">
-                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    自由描述（可选）
-                                </span>
-                                <textarea
-                                    value={requestForm.free_text_input}
-                                    onChange={event => updateRequestField('free_text_input', event.target.value)}
-                                    rows={4}
-                                    placeholder="补充同行人、节奏、饮食等特殊要求"
-                                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                />
-                            </label>
-                        </div>
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-sm font-semibold text-slate-900">旅行需求</h3>
+                        <p className="mt-1 text-xs text-slate-500">确认或修改自动填充的字段，必要时手动补全信息。</p>
                     </div>
 
-                    <div className="space-y-3">
-                        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            TripRequest JSON 预览
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                目的地城市 *
+                            </span>
+                            <input
+                                type="text"
+                                value={requestForm.city}
+                                onChange={event => updateRequestField('city', event.target.value)}
+                                placeholder="例如：杭州"
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
                         </label>
-                        <textarea
-                            readOnly
-                            value={requestPreview}
-                            rows={22}
-                            className="w-full rounded border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700"
-                        />
-                        <p className="text-xs text-slate-400">确保城市与日期填写完整后再提交行程生成。</p>
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                行程开始日期 *
+                            </span>
+                            <input
+                                type="date"
+                                value={requestForm.start_date}
+                                onChange={event => updateRequestField('start_date', event.target.value)}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                行程结束日期 *
+                            </span>
+                            <input
+                                type="date"
+                                value={requestForm.end_date}
+                                onChange={event => updateRequestField('end_date', event.target.value)}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                行程天数（可选）
+                            </span>
+                            <input
+                                type="number"
+                                min={1}
+                                value={requestForm.travel_days}
+                                onChange={event => updateRequestField('travel_days', event.target.value)}
+                                placeholder="例如：5"
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
+                        </label>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                交通偏好（可选）
+                            </span>
+                            <select
+                                value={requestForm.transportation}
+                                onChange={event => updateRequestField('transportation', event.target.value)}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            >
+                                <option value="">请选择交通偏好</option>
+                                {TRIP_FORM_TRANSPORTATION_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                住宿偏好（可选）
+                            </span>
+                            <select
+                                value={requestForm.accommodation}
+                                onChange={event => updateRequestField('accommodation', event.target.value)}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            >
+                                <option value="">请选择住宿偏好</option>
+                                {TRIP_FORM_ACCOMMODATION_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                预算等级（可选）
+                            </span>
+                            <select
+                                value={requestForm.budget_level}
+                                onChange={event => updateRequestField('budget_level', event.target.value)}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            >
+                                <option value="">请选择预算等级</option>
+                                {TRIP_FORM_BUDGET_LEVEL_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
+
+                    <div>
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                兴趣偏好（可选）
+                            </span>
+                            <textarea
+                                value={requestForm.preferences}
+                                onChange={event => updateRequestField('preferences', event.target.value)}
+                                rows={3}
+                                placeholder="例如：美食、自然、摄影"
+                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
+                        </label>
+                        <p className="mt-1 text-xs text-slate-400">可使用逗号、分号或换行分隔多个偏好。</p>
+                    </div>
+
+                    <div>
+                        <label className="flex flex-col gap-1 text-sm text-slate-600">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                自由描述（可选）
+                            </span>
+                            <textarea
+                                value={requestForm.free_text_input}
+                                onChange={event => updateRequestField('free_text_input', event.target.value)}
+                                rows={4}
+                                placeholder="补充同行人、节奏、饮食等特殊要求"
+                                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
+                        </label>
                     </div>
                 </div>
 

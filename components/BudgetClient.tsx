@@ -1276,8 +1276,8 @@ export default function BudgetClient() {
                                         onClick={handleGenerateAnalysis}
                                         disabled={isAnalysisLoading || !selectedTrip}
                                         className={`mt-4 inline-flex w-full items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition ${isAnalysisLoading
-                                                ? 'cursor-wait border border-slate-200 bg-slate-100 text-slate-400'
-                                                : 'border border-purple-500 bg-purple-50 text-purple-600 hover:bg-purple-100'
+                                            ? 'cursor-wait border border-slate-200 bg-slate-100 text-slate-400'
+                                            : 'border border-purple-500 bg-purple-50 text-purple-600 hover:bg-purple-100'
                                             }`}
                                     >
                                         {isAnalysisLoading ? '分析中…' : '生成 AI 分析'}
@@ -1371,59 +1371,6 @@ export default function BudgetClient() {
                                 </div>
                             </aside>
                         </section>
-
-                        <section className="mt-8 grid gap-6 lg:grid-cols-2">
-                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                                <h3 className="text-sm font-semibold text-slate-900">类别占比</h3>
-                                <div className="mt-4 h-72">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Tooltip
-                                                formatter={(value: number, _name: string, entry: any) =>
-                                                    `${CATEGORY_LOOKUP[(entry.payload as CategoryStat).category]}：${formatAmount(value)}`
-                                                }
-                                            />
-                                            <Pie
-                                                data={categoryChartData}
-                                                dataKey="amount"
-                                                nameKey="category"
-                                                innerRadius={60}
-                                                outerRadius={100}
-                                                paddingAngle={4}
-                                            >
-                                                {categoryChartData.map(item => (
-                                                    <Cell
-                                                        key={item.category}
-                                                        fill={CATEGORY_COLOR_LOOKUP[item.category] ?? '#2563eb'}
-                                                    />
-                                                ))}
-                                            </Pie>
-                                            <Legend
-                                                formatter={(value: string) => CATEGORY_LOOKUP[value as ExpenseCategoryKey]}
-                                                verticalAlign="bottom"
-                                                height={36}
-                                            />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-
-                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                                <h3 className="text-sm font-semibold text-slate-900">每日支出</h3>
-                                <div className="mt-4 h-72">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={dateChartData}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                                            <YAxis tick={{ fontSize: 12 }} />
-                                            <Tooltip formatter={(value: number) => formatAmount(value)} />
-                                            <Bar dataKey="amount" fill="#2563eb" radius={[6, 6, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                        </section>
-
                         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                             <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
                                 <div>
@@ -1492,6 +1439,59 @@ export default function BudgetClient() {
                                 </div>
                             )}
                         </section>
+                        <section className="mt-8 grid gap-6 lg:grid-cols-2">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <h3 className="text-sm font-semibold text-slate-900">类别占比</h3>
+                                <div className="mt-4 h-72">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Tooltip
+                                                formatter={(value: number, _name: string, entry: any) =>
+                                                    `${CATEGORY_LOOKUP[(entry.payload as CategoryStat).category]}：${formatAmount(value)}`
+                                                }
+                                            />
+                                            <Pie
+                                                data={categoryChartData}
+                                                dataKey="amount"
+                                                nameKey="category"
+                                                innerRadius={60}
+                                                outerRadius={100}
+                                                paddingAngle={4}
+                                            >
+                                                {categoryChartData.map(item => (
+                                                    <Cell
+                                                        key={item.category}
+                                                        fill={CATEGORY_COLOR_LOOKUP[item.category] ?? '#2563eb'}
+                                                    />
+                                                ))}
+                                            </Pie>
+                                            <Legend
+                                                formatter={(value: string) => CATEGORY_LOOKUP[value as ExpenseCategoryKey]}
+                                                verticalAlign="bottom"
+                                                height={36}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <h3 className="text-sm font-semibold text-slate-900">每日支出</h3>
+                                <div className="mt-4 h-72">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={dateChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                                            <YAxis tick={{ fontSize: 12 }} />
+                                            <Tooltip formatter={(value: number) => formatAmount(value)} />
+                                            <Bar dataKey="amount" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        </section>
+
+
                     </>
                 )}
             </div>
