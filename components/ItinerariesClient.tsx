@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 
 import { useAuth } from './AuthProvider'
 import ItineraryDetailDialog from './ItineraryDetailDialog'
-import type { TripPlan, TripPlanRecord, TripRequest } from '../types/trip'
+import type { TripPlanRecord } from '../types/trip'
 
 interface ApiResponse<T> {
     data?: T
@@ -33,17 +33,16 @@ export default function ItinerariesClient() {
     const [filters, setFilters] = useState<PlanFilters>({ search: '', startDate: '', endDate: '' })
     const [sortOption, setSortOption] = useState<SortOption>(DEFAULT_SORT_OPTION)
 
-    const [editingId, setEditingId] = useState<string | null>(null)
-    const [editPlanJson, setEditPlanJson] = useState('')
-    const [editRequestJson, setEditRequestJson] = useState('')
-    const [editError, setEditError] = useState<string | null>(null)
-    const [editSubmitting, setEditSubmitting] = useState(false)
-
     const [detailPlan, setDetailPlan] = useState<TripPlanRecord | null>(null)
     const [detailOpen, setDetailOpen] = useState(false)
     const [deletingId, setDeletingId] = useState<string | null>(null)
 
     const planIdQuery = searchParams?.get('planId') ?? null
+
+    const handlePlanUpdated = useCallback((updated: TripPlanRecord) => {
+        setPlans(prev => prev.map(item => (item.id === updated.id ? updated : item)))
+        setDetailPlan(updated)
+    }, [])
 
     const resetFilters = useCallback(() => {
         setFilters({ search: '', startDate: '', endDate: '' })
@@ -192,64 +191,6 @@ export default function ItinerariesClient() {
         return () => window.clearTimeout(timer)
     }, [detailOpen, detailPlan])
 
-    const beginEdit = useCallback((record: TripPlanRecord) => {
-        setEditingId(record.id)
-        setEditPlanJson(JSON.stringify({
-            city: record.city,
-            start_date: record.start_date,
-            end_date: record.end_date,
-            days: record.days,
-            weather_info: record.weather_info,
-            overall_suggestions: record.overall_suggestions,
-            budget: record.budget ?? undefined
-        }, null, 2))
-        setEditRequestJson(record.request ? JSON.stringify(record.request, null, 2) : '')
-        setEditError(null)
-    }, [])
-
-    const cancelEdit = useCallback(() => {
-        setEditingId(null)
-        setEditPlanJson('')
-        setEditRequestJson('')
-        setEditError(null)
-    }, [])
-
-    const handleUpdate = useCallback(async () => {
-        if (!user || !editingId) {
-            setEditError('未选择要更新的行程或未登录。')
-            return
-        }
-        setEditSubmitting(true)
-        setEditError(null)
-        try {
-            const plan = JSON.parse(editPlanJson) as TripPlan
-            const request = editRequestJson.trim() ? (JSON.parse(editRequestJson) as TripRequest) : null
-
-            const response = await fetch(`/api/itineraries/${editingId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ plan, request })
-            })
-            const payload = (await response.json()) as ApiResponse<TripPlanRecord>
-
-            if (!response.ok) {
-                throw new Error(payload.error || '更新行程失败。')
-            }
-            if (!payload.data) {
-                throw new Error('未返回更新后的行程。')
-            }
-
-            const updated = payload.data
-            setPlans(prev => prev.map(item => (item.id === updated.id ? updated : item)))
-            cancelEdit()
-        } catch (err) {
-            console.error(err)
-            setEditError(err instanceof Error ? err.message : '更新行程失败，请检查 JSON 格式。')
-        } finally {
-            setEditSubmitting(false)
-        }
-    }, [cancelEdit, editPlanJson, editRequestJson, editingId, user])
-
     const openDetail = useCallback(
         (plan: TripPlanRecord, options?: { replace?: boolean }) => {
             setDetailPlan(plan)
@@ -285,10 +226,6 @@ export default function ItinerariesClient() {
 
                 setPlans(prev => prev.filter(item => item.id !== plan.id))
 
-                if (editingId === plan.id) {
-                    cancelEdit()
-                }
-
                 if (detailPlan?.id === plan.id) {
                     setDetailOpen(false)
                     setDetailPlan(null)
@@ -301,7 +238,7 @@ export default function ItinerariesClient() {
                 setDeletingId(null)
             }
         },
-        [user, cancelEdit, detailPlan, editingId, updatePlanIdQuery]
+        [user, detailPlan, updatePlanIdQuery]
     )
 
     const planSummary = useCallback((plan: TripPlanRecord) => {
@@ -471,13 +408,6 @@ export default function ItinerariesClient() {
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => beginEdit(plan)}
-                                                className="rounded-full border border-blue-500 px-3 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-50"
-                                            >
-                                                编辑
-                                            </button>
-                                            <button
-                                                type="button"
                                                 onClick={() => handleDelete(plan)}
                                                 disabled={deletingId === plan.id}
                                                 className="rounded-full border border-red-500 px-3 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-red-300 disabled:text-red-300"
@@ -487,54 +417,18 @@ export default function ItinerariesClient() {
                                         </div>
                                     </div>
                                     <p className="mt-2 text-sm text-slate-600">{plan.overall_suggestions}</p>
-
-                                    {editingId === plan.id ? (
-                                        <div className="mt-4 space-y-3 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
-                                            <h4 className="text-sm font-semibold text-blue-700">编辑 TripPlan JSON</h4>
-                                            <label className="block text-xs font-medium text-blue-700">TripPlan</label>
-                                            <textarea
-                                                value={editPlanJson}
-                                                onChange={event => setEditPlanJson(event.target.value)}
-                                                rows={12}
-                                                className="w-full rounded border border-blue-200 bg-white p-2 font-mono text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                            />
-                                            <label className="block text-xs font-medium text-blue-700">TripRequest（可选）</label>
-                                            <textarea
-                                                value={editRequestJson}
-                                                onChange={event => setEditRequestJson(event.target.value)}
-                                                rows={6}
-                                                className="w-full rounded border border-blue-200 bg-white p-2 font-mono text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                                placeholder="{}"
-                                            />
-                                            {editError ? (
-                                                <p className="text-xs text-red-600">{editError}</p>
-                                            ) : null}
-                                            <div className="flex flex-wrap gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleUpdate}
-                                                    disabled={editSubmitting}
-                                                    className="rounded-full bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-                                                >
-                                                    {editSubmitting ? '保存中…' : '保存修改'}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={cancelEdit}
-                                                    className="rounded-full border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-400"
-                                                >
-                                                    取消
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ) : null}
                                 </li>
                             ))}
                         </ul>
                     )}
                 </section>
             </div>
-            <ItineraryDetailDialog open={detailOpen} plan={activeDetailPlan} onClose={closeDetail} />
+            <ItineraryDetailDialog
+                open={detailOpen}
+                plan={activeDetailPlan}
+                onClose={closeDetail}
+                onPlanUpdated={handlePlanUpdated}
+            />
         </>
     )
 }

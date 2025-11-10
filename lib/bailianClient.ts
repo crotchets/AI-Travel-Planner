@@ -1,4 +1,4 @@
-import type { RuntimeConfig } from './runtimeConfig'
+import type { RuntimeConfig } from '../types/runtimeConfig'
 import type { TripPlan, TripRequest } from '../types/trip'
 
 export type ChatCompletionMessage = {
