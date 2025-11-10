@@ -1,3 +1,4 @@
+import type { RuntimeConfig } from './runtimeConfig'
 import type { TripPlan, TripRequest } from '../types/trip'
 
 export type ChatCompletionMessage = {
@@ -11,6 +12,7 @@ interface BailianChatCompletionOptions {
     temperature?: number
     responseFormat?: unknown
     timeoutMs?: number
+    runtimeConfig?: RuntimeConfig | null
 }
 
 interface BailianChatCompletionResponseChoice {
@@ -27,20 +29,27 @@ const DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
 const DEFAULT_TIMEOUT_FALLBACK_MS = 120_000
 
-function parseTimeoutEnv() {
-    const raw =
-        process.env.NEXT_PUBLIC_BAILIAN_REQUEST_TIMEOUT_MS ??
-        process.env.NEXT_PUBLIC_BAILIAN_TIMEOUT_MS ??
-        process.env.NEXT_PUBLIC_BAILIAN_TIMEOUT ??
-        ''
-    const parsed = Number.parseInt(raw, 10)
+function parseTimeoutValue(value: string | undefined | null) {
+    if (!value) return null
+    const parsed = Number.parseInt(value, 10)
     if (Number.isFinite(parsed) && parsed > 0) {
         return parsed
     }
-    return DEFAULT_TIMEOUT_FALLBACK_MS
+    return null
 }
 
-const DEFAULT_TIMEOUT_MS = parseTimeoutEnv()
+function resolveTimeoutMs(runtimeConfig?: RuntimeConfig | null) {
+    const runtimeValue = runtimeConfig?.NEXT_PUBLIC_BAILIAN_REQUEST_TIMEOUT_MS
+    const runtimeParsed = parseTimeoutValue(runtimeValue)
+    if (runtimeParsed !== null) {
+        return runtimeParsed
+    }
+    const envParsed = parseTimeoutValue(process.env.NEXT_PUBLIC_BAILIAN_REQUEST_TIMEOUT_MS)
+    if (envParsed !== null) {
+        return envParsed
+    }
+    return DEFAULT_TIMEOUT_FALLBACK_MS
+}
 
 type TripFormOption = {
     value: string
@@ -399,16 +408,17 @@ export async function callBailianChatCompletion({
     messages,
     temperature,
     responseFormat,
-    timeoutMs
+    timeoutMs,
+    runtimeConfig
 }: BailianChatCompletionOptions) {
-    const apiKey = process.env.NEXT_PUBLIC_BAILIAN_API_KEY
-    const baseUrl = process.env.NEXT_PUBLIC_BAILIAN_API_BASE_URL ?? DEFAULT_BASE_URL
-    const defaultModel = process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL ?? 'qwen-plus'
+    const apiKey = runtimeConfig?.NEXT_PUBLIC_BAILIAN_API_KEY ?? process.env.NEXT_PUBLIC_BAILIAN_API_KEY
+    const baseUrl = runtimeConfig?.NEXT_PUBLIC_BAILIAN_API_BASE_URL ?? process.env.NEXT_PUBLIC_BAILIAN_API_BASE_URL ?? DEFAULT_BASE_URL
+    const defaultModel = runtimeConfig?.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL ?? process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL ?? 'qwen-plus'
 
     ensureEnv('NEXT_PUBLIC_BAILIAN_API_KEY', apiKey)
 
     const controller = new AbortController()
-    const effectiveTimeout = timeoutMs ?? DEFAULT_TIMEOUT_MS
+    const effectiveTimeout = timeoutMs ?? resolveTimeoutMs(runtimeConfig)
     const timeout = setTimeout(() => controller.abort(), effectiveTimeout)
 
     try {
@@ -444,8 +454,12 @@ export async function callBailianChatCompletion({
     }
 }
 
-export async function extractTripRequestFromPrompt(prompt: string): Promise<TripRequest> {
-    const model = process.env.NEXT_PUBLIC_BAILIAN_TRIP_REQUEST_MODEL ?? process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL
+export async function extractTripRequestFromPrompt(
+    prompt: string,
+    runtimeConfig?: RuntimeConfig | null
+): Promise<TripRequest> {
+    const defaultModel = runtimeConfig?.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL ?? process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL
+    const model = runtimeConfig?.NEXT_PUBLIC_BAILIAN_TRIP_REQUEST_MODEL ?? defaultModel
     const response = await callBailianChatCompletion({
         model,
         messages: [
@@ -466,7 +480,8 @@ export async function extractTripRequestFromPrompt(prompt: string): Promise<Trip
                 strict: true,
                 schema: TRIP_REQUEST_SCHEMA
             }
-        }
+        },
+        runtimeConfig
     })
 
     const content = response.choices?.[0]?.message?.content
@@ -495,9 +510,10 @@ export async function extractTripRequestFromPrompt(prompt: string): Promise<Trip
 
 export async function generateTripPlanFromRequest(
     request: TripRequest,
-    options: { userPrompt?: string; temperature?: number } = {}
+    options: { userPrompt?: string; temperature?: number; runtimeConfig?: RuntimeConfig | null } = {}
 ): Promise<TripPlan> {
-    const model = process.env.NEXT_PUBLIC_BAILIAN_TRIP_PLAN_MODEL ?? process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL
+    const defaultModel = options.runtimeConfig?.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL ?? process.env.NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL
+    const model = options.runtimeConfig?.NEXT_PUBLIC_BAILIAN_TRIP_PLAN_MODEL ?? defaultModel
 
     const response = await callBailianChatCompletion({
         model,
@@ -519,7 +535,8 @@ export async function generateTripPlanFromRequest(
                 strict: true,
                 schema: TRIP_PLAN_SCHEMA
             }
-        }
+        },
+        runtimeConfig: options.runtimeConfig
     })
 
     const content = response.choices?.[0]?.message?.content

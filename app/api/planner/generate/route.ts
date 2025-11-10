@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 import { generateTripPlanFromRequest } from '../../../../lib/bailianClient'
+import { loadUserRuntimeConfig } from '../../../../lib/runtimeConfig'
 import { buildTripInsertPayload, mapTripRowToRecord, TRIP_TABLE_NAME } from '../../../../lib/tripMapper'
 import { validateTripPlan, validateTripRequest } from '../../../../lib/tripValidation'
 import type { TripPlanRow, TripRequest } from '../../../../types/trip'
@@ -46,7 +47,8 @@ export async function POST(request: Request) {
     }
 
     try {
-        const plan = await generateTripPlanFromRequest(sanitizedRequest, { userPrompt: hint })
+        const runtimeConfig = await loadUserRuntimeConfig(supabase, user.id)
+        const plan = await generateTripPlanFromRequest(sanitizedRequest, { userPrompt: hint, runtimeConfig })
         validateTripPlan(plan)
 
         const payload = buildTripInsertPayload(plan, user.id, sanitizedRequest)

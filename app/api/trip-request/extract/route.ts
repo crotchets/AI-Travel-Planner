@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 import { extractTripRequestFromPrompt } from '../../../../lib/bailianClient'
+import { loadUserRuntimeConfig } from '../../../../lib/runtimeConfig'
 
 export async function POST(request: Request) {
     const supabase = createRouteHandlerClient({ cookies })
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
     }
 
     try {
-        const data = await extractTripRequestFromPrompt(prompt)
+        const runtimeConfig = await loadUserRuntimeConfig(supabase, user.id)
+        const data = await extractTripRequestFromPrompt(prompt, runtimeConfig)
         return NextResponse.json({ data })
     } catch (error) {
         console.error('extractTripRequestFromPrompt failed', error)

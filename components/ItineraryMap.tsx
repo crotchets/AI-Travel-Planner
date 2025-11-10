@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import AMapLoader from '@amap/amap-jsapi-loader'
 
 import type { DayPlan, TripPlanRecord } from '../types/trip'
+import type { RuntimeConfig } from '../types/runtimeConfig'
 
 declare global {
     interface Window {
@@ -96,8 +97,55 @@ function collectPolylines(days: DayPlan[]) {
 export default function ItineraryMap({ plan, height = 420 }: ItineraryMapProps) {
     const containerRef = useRef<HTMLDivElement | null>(null)
 
-    const apiKey = (ENV_API_KEY || '').trim()
-    const securityCode = (ENV_SECURITY_CODE || '').trim()
+    const [apiKey, setApiKey] = useState<string>(ENV_API_KEY)
+    const [securityCode, setSecurityCode] = useState<string>(ENV_SECURITY_CODE)
+
+    useEffect(() => {
+        let cancelled = false
+
+        const loadRuntimeConfig = async () => {
+            try {
+                const response = await fetch('/api/settings/config', {
+                    method: 'GET',
+                    headers: { Accept: 'application/json' },
+                    cache: 'no-store'
+                })
+
+                if (!response.ok) {
+                    return
+                }
+
+                const payload = (await response.json().catch(() => null)) as
+                    | { data?: { effective?: RuntimeConfig | null } }
+                    | null
+
+                const effective = payload?.data?.effective
+                if (!effective) {
+                    return
+                }
+
+                if (cancelled) {
+                    return
+                }
+
+                const runtimeApiKey = (effective.NEXT_PUBLIC_AMAP_API_KEY ?? '').trim()
+                const runtimeSecurity = (effective.NEXT_PUBLIC_AMAP_SECURITY_CODE ?? '').trim()
+
+                setApiKey(runtimeApiKey || ENV_API_KEY)
+                setSecurityCode(runtimeSecurity || ENV_SECURITY_CODE)
+            } catch (error) {
+                if (process.env.NODE_ENV !== 'production') {
+                    console.error('[ItineraryMap] fetch runtime config failed', error)
+                }
+            }
+        }
+
+        void loadRuntimeConfig()
+
+        return () => {
+            cancelled = true
+        }
+    }, [])
 
     const points = useMemo(() => collectPoints(plan.days), [plan.days])
     const polylines = useMemo(() => collectPolylines(plan.days), [plan.days])
@@ -205,7 +253,7 @@ export default function ItineraryMap({ plan, height = 420 }: ItineraryMapProps) 
     if (!apiKey) {
         return (
             <div className="flex h-full min-h-[280px] w-full items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
-                请在环境变量中配置 NEXT_PUBLIC_AMAP_API_KEY 后查看地图
+                请在设置页面或环境变量中配置 NEXT_PUBLIC_AMAP_API_KEY 后查看地图
             </div>
         )
     }

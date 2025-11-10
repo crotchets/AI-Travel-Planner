@@ -9,6 +9,7 @@ import { summarizeExpenseStats } from '../../../../lib/expenseStats'
 import { TRIP_TABLE_NAME } from '../../../../lib/tripMapper'
 import type { ExpenseAnalysisResponse, ExpenseRecord } from '../../../../types/expense'
 import { applyExpenseFilters, ensureDateString, normalizeString } from '../helpers'
+import { loadUserRuntimeConfig } from '../../../../lib/runtimeConfig'
 
 const ANALYSIS_SCHEMA = {
     type: 'object',
@@ -226,6 +227,8 @@ export async function POST(request: Request) {
         sample_expenses: buildSampleExpenses(expenseRecords)
     }
 
+    const runtimeConfig = await loadUserRuntimeConfig(supabase, user.id)
+
     const modelResponse = await callBailianChatCompletion({
         messages: [
             {
@@ -254,7 +257,8 @@ export async function POST(request: Request) {
                 strict: true,
                 schema: ANALYSIS_SCHEMA
             }
-        }
+        },
+        runtimeConfig
     })
 
     const content = modelResponse.choices?.[0]?.message?.content

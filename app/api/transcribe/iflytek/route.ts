@@ -1,28 +1,84 @@
 import crypto from 'crypto'
 import WebSocket from 'ws'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+
+import type { RuntimeConfig } from '../../../../types/runtimeConfig'
+import { loadUserRuntimeConfig } from '../../../../lib/runtimeConfig'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_WS_URL = process.env.NEXT_PUBLIC_IFLYTEK_IAT_URL ?? 'wss://iat-api.xfyun.cn/v2/iat'
-const parsedWsUrl = new URL(DEFAULT_WS_URL)
-const WS_HOST = parsedWsUrl.host
-const WS_PATH = parsedWsUrl.pathname || '/v2/iat'
+const FALLBACK_WS_URL = 'wss://iat-api.xfyun.cn/v2/iat'
+const FALLBACK_SAMPLE_RATE = 16000
+const FALLBACK_CHUNK_BYTES = 1280
+const FALLBACK_MAX_AUDIO_BYTES = 10 * 1024 * 1024
+const FALLBACK_BUSINESS: Record<string, string> = {
+    language: 'zh_cn',
+    domain: 'iat',
+    accent: 'mandarin',
+    dwa: 'wpgs'
+}
 
-const APP_ID = process.env.NEXT_PUBLIC_IFLYTEK_IAT_APP_ID?.trim()
-const API_KEY = process.env.NEXT_PUBLIC_IFLYTEK_IAT_API_KEY?.trim()
-const API_SECRET = process.env.NEXT_PUBLIC_IFLYTEK_IAT_API_SECRET?.trim()
+interface IflytekResolvedConfig {
+    wsUrl: string
+    appId: string
+    apiKey: string
+    apiSecret: string
+    sampleRate: number
+    chunkBytes: number
+    maxBytes: number
+    business: Record<string, string>
+}
 
-const DEFAULT_SAMPLE_RATE = Number(process.env.NEXT_PUBLIC_IFLYTEK_IAT_SAMPLE_RATE ?? 16000)
-const FRAME_CHUNK_BYTES = Number(process.env.NEXT_PUBLIC_IFLYTEK_IAT_CHUNK_BYTES ?? 1280)
-const MAX_AUDIO_BYTES = Number(process.env.NEXT_PUBLIC_IFLYTEK_IAT_MAX_BYTES ?? 10 * 1024 * 1024)
+function parsePositiveInt(value: string | null | undefined, fallback: number) {
+    const parsed = Number.parseInt((value ?? '').trim(), 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed
+    }
+    return fallback
+}
 
-const DEFAULT_BUSINESS: Record<string, string> = {
-    language: process.env.NEXT_PUBLIC_IFLYTEK_IAT_LANGUAGE ?? 'zh_cn',
-    domain: process.env.NEXT_PUBLIC_IFLYTEK_IAT_DOMAIN ?? 'iat',
-    accent: process.env.NEXT_PUBLIC_IFLYTEK_IAT_ACCENT ?? 'mandarin',
-    dwa: process.env.NEXT_PUBLIC_IFLYTEK_IAT_DWA ?? 'wpgs'
+function resolveIflytekConfig(runtimeConfig?: RuntimeConfig | null): IflytekResolvedConfig {
+    const wsUrl = runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_URL?.trim() || process.env.NEXT_PUBLIC_IFLYTEK_IAT_URL?.trim() || FALLBACK_WS_URL
+    const appId = runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_APP_ID?.trim() || process.env.NEXT_PUBLIC_IFLYTEK_IAT_APP_ID?.trim() || ''
+    const apiKey = runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_API_KEY?.trim() || process.env.NEXT_PUBLIC_IFLYTEK_IAT_API_KEY?.trim() || ''
+    const apiSecret = runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_API_SECRET?.trim() || process.env.NEXT_PUBLIC_IFLYTEK_IAT_API_SECRET?.trim() || ''
+
+    const sampleRate = parsePositiveInt(runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_SAMPLE_RATE ?? process.env.NEXT_PUBLIC_IFLYTEK_IAT_SAMPLE_RATE, FALLBACK_SAMPLE_RATE)
+    const chunkBytes = parsePositiveInt(runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_CHUNK_BYTES ?? process.env.NEXT_PUBLIC_IFLYTEK_IAT_CHUNK_BYTES, FALLBACK_CHUNK_BYTES)
+    const maxBytes = parsePositiveInt(runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_MAX_BYTES ?? process.env.NEXT_PUBLIC_IFLYTEK_IAT_MAX_BYTES, FALLBACK_MAX_AUDIO_BYTES)
+
+    const business: Record<string, string> = {
+        language:
+            runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_LANGUAGE?.trim() ||
+            process.env.NEXT_PUBLIC_IFLYTEK_IAT_LANGUAGE?.trim() ||
+            FALLBACK_BUSINESS.language,
+        domain:
+            runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_DOMAIN?.trim() ||
+            process.env.NEXT_PUBLIC_IFLYTEK_IAT_DOMAIN?.trim() ||
+            FALLBACK_BUSINESS.domain,
+        accent:
+            runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_ACCENT?.trim() ||
+            process.env.NEXT_PUBLIC_IFLYTEK_IAT_ACCENT?.trim() ||
+            FALLBACK_BUSINESS.accent,
+        dwa:
+            runtimeConfig?.NEXT_PUBLIC_IFLYTEK_IAT_DWA?.trim() ||
+            process.env.NEXT_PUBLIC_IFLYTEK_IAT_DWA?.trim() ||
+            FALLBACK_BUSINESS.dwa
+    }
+
+    return {
+        wsUrl,
+        appId,
+        apiKey,
+        apiSecret,
+        sampleRate,
+        chunkBytes,
+        maxBytes,
+        business
+    }
 }
 
 const FRAME_STATUS = {
@@ -58,27 +114,30 @@ interface IatResponsePayload {
     }
 }
 
-function ensureCredentials() {
-    if (!APP_ID || !API_KEY || !API_SECRET) {
+function ensureCredentials(config: IflytekResolvedConfig) {
+    if (!config.appId || !config.apiKey || !config.apiSecret) {
         throw new Error(
-            '未配置讯飞语音听写凭证，请在环境变量中设置 NEXT_PUBLIC_IFLYTEK_IAT_APP_ID、NEXT_PUBLIC_IFLYTEK_IAT_API_KEY、NEXT_PUBLIC_IFLYTEK_IAT_API_SECRET。'
+            '未配置讯飞语音听写凭证，请在设置页面填写 NEXT_PUBLIC_IFLYTEK_IAT_APP_ID、NEXT_PUBLIC_IFLYTEK_IAT_API_KEY、NEXT_PUBLIC_IFLYTEK_IAT_API_SECRET。'
         )
     }
 }
 
-function buildWsUrl(date: string) {
-    const signatureOrigin = `host: ${WS_HOST}\ndate: ${date}\nGET ${WS_PATH} HTTP/1.1`
-    const signature = crypto.createHmac('sha256', API_SECRET as string).update(signatureOrigin).digest('base64')
-    const authorizationOrigin = `api_key="${API_KEY}", algorithm="hmac-sha256", headers="host date request-line", signature="${signature}"`
+function buildWsUrl(config: IflytekResolvedConfig, date: string) {
+    const parsedUrl = new URL(config.wsUrl)
+    const host = parsedUrl.host
+    const path = parsedUrl.pathname || '/v2/iat'
+    const signatureOrigin = `host: ${host}\ndate: ${date}\nGET ${path} HTTP/1.1`
+    const signature = crypto.createHmac('sha256', config.apiSecret).update(signatureOrigin).digest('base64')
+    const authorizationOrigin = `api_key="${config.apiKey}", algorithm="hmac-sha256", headers="host date request-line", signature="${signature}"`
     const authorization = Buffer.from(authorizationOrigin).toString('base64')
 
     const params = new URLSearchParams({
         authorization,
         date,
-        host: WS_HOST
+        host
     })
 
-    return `${DEFAULT_WS_URL}?${params.toString()}`
+    return `${config.wsUrl}?${params.toString()}`
 }
 
 function buildTranscript(results: Array<IatResult | null>) {
@@ -92,9 +151,9 @@ function buildTranscript(results: Array<IatResult | null>) {
         .join('')
 }
 
-function normaliseBusiness(overrides?: unknown) {
+function normaliseBusiness(base: Record<string, string>, overrides?: unknown) {
     if (!overrides || typeof overrides !== 'object') {
-        return { ...DEFAULT_BUSINESS }
+        return { ...base }
     }
 
     const sanitised: Record<string, string> = {}
@@ -104,10 +163,11 @@ function normaliseBusiness(overrides?: unknown) {
         }
     }
 
-    return { ...DEFAULT_BUSINESS, ...sanitised }
+    return { ...base, ...sanitised }
 }
 
 function createFramePayload(params: {
+    appId: string
     status: number
     chunk: Buffer | null
     sampleRate: number
@@ -124,7 +184,7 @@ function createFramePayload(params: {
     if (params.status === FRAME_STATUS.FIRST) {
         return {
             common: {
-                app_id: APP_ID
+                app_id: params.appId
             },
             business: params.business,
             data
@@ -134,19 +194,24 @@ function createFramePayload(params: {
     return { data }
 }
 
-async function streamByWebsocket(audio: Buffer, sampleRate: number, businessOverrides?: unknown) {
-    ensureCredentials()
+async function streamByWebsocket(
+    config: IflytekResolvedConfig,
+    audio: Buffer,
+    sampleRate: number,
+    businessOverrides?: unknown
+) {
+    ensureCredentials(config)
 
     if (!audio.length) {
         throw new Error('音频内容为空，无法进行语音听写。')
     }
 
-    if (audio.length > MAX_AUDIO_BYTES) {
-        throw new Error(`音频内容过大（>${Math.round(MAX_AUDIO_BYTES / (1024 * 1024))}MB），请缩短录音时长后再试。`)
+    if (audio.length > config.maxBytes) {
+        throw new Error(`音频内容过大（>${Math.round(config.maxBytes / (1024 * 1024))}MB），请缩短录音时长后再试。`)
     }
 
-    const business = normaliseBusiness(businessOverrides)
-    const chunkSize = Number.isFinite(FRAME_CHUNK_BYTES) && FRAME_CHUNK_BYTES > 0 ? FRAME_CHUNK_BYTES : 1280
+    const business = normaliseBusiness(config.business, businessOverrides)
+    const chunkSize = Number.isFinite(config.chunkBytes) && config.chunkBytes > 0 ? config.chunkBytes : FALLBACK_CHUNK_BYTES
 
     return new Promise<{
         transcript: string
@@ -155,7 +220,7 @@ async function streamByWebsocket(audio: Buffer, sampleRate: number, businessOver
         message?: string
     }>((resolve, reject) => {
         const date = new Date().toUTCString()
-        const wsUrl = buildWsUrl(date)
+        const wsUrl = buildWsUrl(config, date)
         const ws = new WebSocket(wsUrl)
 
         let hasFinished = false
@@ -172,7 +237,13 @@ async function streamByWebsocket(audio: Buffer, sampleRate: number, businessOver
                 }
 
                 if (offset >= audio.length) {
-                    const lastFrame = createFramePayload({ status: FRAME_STATUS.LAST, chunk: null, sampleRate, business })
+                    const lastFrame = createFramePayload({
+                        appId: config.appId,
+                        status: FRAME_STATUS.LAST,
+                        chunk: null,
+                        sampleRate,
+                        business
+                    })
                     ws.send(JSON.stringify(lastFrame))
                     status = FRAME_STATUS.LAST
                     return
@@ -180,7 +251,13 @@ async function streamByWebsocket(audio: Buffer, sampleRate: number, businessOver
 
                 const end = Math.min(offset + chunkSize, audio.length)
                 const chunk = audio.subarray(offset, end)
-                const frame = createFramePayload({ status, chunk, sampleRate, business })
+                const frame = createFramePayload({
+                    appId: config.appId,
+                    status,
+                    chunk,
+                    sampleRate,
+                    business
+                })
                 ws.send(JSON.stringify(frame))
                 status = FRAME_STATUS.CONTINUE
                 offset = end
@@ -259,6 +336,18 @@ interface RequestBody {
 
 export async function POST(request: Request) {
     try {
+        const supabase = createRouteHandlerClient({ cookies })
+        const {
+            data: { user }
+        } = await supabase.auth.getUser()
+
+        if (!user) {
+            return NextResponse.json({ error: '未授权，请登录后再使用语音听写功能。' }, { status: 401 })
+        }
+
+        const runtimeConfig = await loadUserRuntimeConfig(supabase, user.id)
+        const iflytekConfig = resolveIflytekConfig(runtimeConfig)
+
         const parsedBody = (await request.json().catch(() => null)) as RequestBody | null
 
         if (!parsedBody || typeof parsedBody !== 'object') {
@@ -289,9 +378,14 @@ export async function POST(request: Request) {
         const requestedSampleRate = Number(parsedBody.sampleRate)
         const sampleRate = Number.isFinite(requestedSampleRate) && requestedSampleRate > 0
             ? requestedSampleRate
-            : DEFAULT_SAMPLE_RATE
+            : iflytekConfig.sampleRate
 
-        const { transcript, segments, sid, message } = await streamByWebsocket(audioBuffer, sampleRate, parsedBody.business)
+        const { transcript, segments, sid, message } = await streamByWebsocket(
+            iflytekConfig,
+            audioBuffer,
+            sampleRate,
+            parsedBody.business
+        )
 
         return NextResponse.json({ transcript, segments, sid, message })
     } catch (error) {

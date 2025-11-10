@@ -16,20 +16,17 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 NEXT_PUBLIC_AMAP_API_KEY=your_amap_web_js_key
 NEXT_PUBLIC_AMAP_SECURITY_CODE=your_amap_security_code # 可选，若开启安全密钥需配置
-IFLYTEK_IAT_APP_ID=your_iflytek_iat_app_id
-IFLYTEK_IAT_API_KEY=your_iflytek_iat_api_key
-IFLYTEK_IAT_API_SECRET=your_iflytek_iat_api_secret
-# （可选）兼容旧 REST 调用的变量
-IFLYTEK_APP_ID=your_legacy_iflytek_app_id
-IFLYTEK_API_SECRET=your_legacy_iflytek_api_secret
-BAILIAN_API_KEY=your_bailian_api_key
+NEXT_PUBLIC_IFLYTEK_IAT_APP_ID=your_iflytek_iat_app_id
+NEXT_PUBLIC_IFLYTEK_IAT_API_KEY=your_iflytek_iat_api_key
+NEXT_PUBLIC_IFLYTEK_IAT_API_SECRET=your_iflytek_iat_api_secret
+NEXT_PUBLIC_BAILIAN_API_KEY=your_bailian_api_key
 # 以下均为可选配置，用于自定义模型或网关
-BAILIAN_API_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-BAILIAN_DEFAULT_MODEL=qwen-plus
-BAILIAN_TRIP_REQUEST_MODEL=qwen-plus
-BAILIAN_TRIP_PLAN_MODEL=qwen-plus
+NEXT_PUBLIC_BAILIAN_API_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+NEXT_PUBLIC_BAILIAN_DEFAULT_MODEL=qwen-plus
+NEXT_PUBLIC_BAILIAN_TRIP_REQUEST_MODEL=qwen-plus
+NEXT_PUBLIC_BAILIAN_TRIP_PLAN_MODEL=qwen-plus
 # 超时时间可选配置（单位：毫秒，默认 120000，即 120 秒）
-BAILIAN_REQUEST_TIMEOUT_MS=120000
+NEXT_PUBLIC_BAILIAN_REQUEST_TIMEOUT_MS=120000
 ```
 
 主要目录：
