@@ -12,7 +12,7 @@ dist/
 # next.js
 /.next/
 /out/
-
+.env.example
 # production
 /build
 
