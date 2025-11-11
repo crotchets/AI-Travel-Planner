@@ -30,6 +30,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify({ event, session })
             })
         } catch (error) {
@@ -43,18 +44,18 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             const { data, error } = await supabase.auth.getSession()
             if (error) {
                 console.error('auth refresh error', error)
-                setUserState(null)
                 await syncSessionWithServer('SIGNED_OUT', null)
+                setUserState(null)
                 return
             }
             const session = data?.session ?? null
             const sessionUser = session?.user ?? null
-            setUserState(sessionUser)
             await syncSessionWithServer(sessionUser ? 'SIGNED_IN' : 'SIGNED_OUT', session)
+            setUserState(sessionUser)
         } catch (err) {
             console.error('auth refresh exception', err)
-            setUserState(null)
             await syncSessionWithServer('SIGNED_OUT', null)
+            setUserState(null)
         }
     }, [setUserState, syncSessionWithServer])
 
@@ -66,8 +67,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         const { data } = supabase.auth.onAuthStateChange((_event, session) => {
             if (cancelled) return
             const nextUser = session?.user ?? null
-            setUserState(nextUser)
+            setStatus('loading')
             void syncSessionWithServer(_event, session)
+                .catch(error => {
+                    console.error('sync session onAuthStateChange failed', error)
+                })
+                .finally(() => {
+                    if (!cancelled) {
+                        setUserState(nextUser)
+                    }
+                })
         })
 
         return () => {
